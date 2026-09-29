@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.1
-// @description  Medya Indir simge testi: sabit simge ile dokununca beliren simgeyi karsilastirir. Gecici betik.
+// @version      1.2
+// @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
 // @noframes
@@ -35,11 +35,16 @@ function R(){
 
 function A(u){
   var p=(u.split('?')[0].split('/').pop()||'resim').replace(/[^\w.\-]/g,'_');
-  if(!/\.(jpe?g|png|gif|webp)$/i.test(p))p+='.jpg';
+  if(!/\.(jpe?g|png|gif|webp|mp4|webm|mov)$/i.test(p))p+='.jpg';
   return p
 }
 
 function B(i){
+  if(i.tagName==='VIDEO'){
+    var v=i.currentSrc||i.src;
+    if(!v){var so=i.querySelector('source');if(so)v=so.src}
+    return v||''
+  }
   var u=i.currentSrc||i.src,ss=i.getAttribute('srcset'),m=0;
   if(ss)ss.split(',').forEach(function(p){
     var q=p.trim().split(/\s+/),w=parseFloat(q[1])||0;
@@ -48,17 +53,26 @@ function B(i){
   return u
 }
 
-function Y(u){
+function V(i){
+  var u=B(i);
+  if(!u){N('Video: kaynak adresi yok');return}
+  if(u.indexOf('blob:')===0||u.indexOf('mediastream:')===0){N('Video: akis (blob:), desteklenmiyor');return}
+  var p=A(u);if(!/\.(mp4|webm|mov)$/i.test(p))p=p.replace(/\.jpg$/,'')+'.mp4';
+  N('Video: dogrudan adres, indiriliyor',4);Y(u,p)
+}
+
+function Y(u,ad){
   N('Indiriliyor...',3);
   GM_xmlhttpRequest({method:'GET',url:u,responseType:'blob',anonymous:true,headers:{Referer:location.href},
     onload:function(r){
       if(r.status!==200){N('Durum '+r.status+', yeni sekmede aciliyor');window.open(u,'_blank');return}
       var x=URL.createObjectURL(r.response),a=document.createElement('a');
-      a.href=x;a.download=A(u);document.body.appendChild(a);a.click();a.remove();
+      a.href=x;a.download=ad||A(u);document.body.appendChild(a);a.click();a.remove();
       setTimeout(function(){URL.revokeObjectURL(x)},30000);
       N('Indirildi ('+Math.round(r.response.size/1024)+' KB)')
     },
-    onerror:function(){N('Ag hatasi')}
+    onerror:function(){N('Ag hatasi')},
+    onprogress:function(e){if(e.total>5e6&&e.loaded%(5e6)<2e5)N(Math.round(e.loaded/1048576)+' / '+Math.round(e.total/1048576)+' MB',2)}
   })
 }
 
@@ -71,7 +85,7 @@ function S(i){
   if(!k){
     k=document.createElement('div');k.textContent='\u2B07';
     k.style.cssText='position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font:16px sans-serif;display:flex;align-items:center;justify-content:center;z-index:'+Z+';cursor:pointer';
-    k.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();Y(B(i))},true);
+    k.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();if(i.tagName==='VIDEO')V(i);else Y(B(i))},true);
     document.body.appendChild(k);HR.set(i,k)
   }
   k.style.top=(r.top+scrollY+4)+'px';k.style.left=(r.right+scrollX-32)+'px';
@@ -80,7 +94,7 @@ function S(i){
 
 function T(){
   HR.forEach(function(k,i){if(!i.isConnected||MOD!=='sabit'){k.remove();HR.delete(i)}});
-  if(MOD==='sabit')document.querySelectorAll('img').forEach(S)
+  if(MOD==='sabit')document.querySelectorAll('img,video').forEach(S)
 }
 
 document.addEventListener('click',function(e){
