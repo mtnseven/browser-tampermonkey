@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      6.2
+// @version      6.3
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      *
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // @downloadURL  https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // ==/UserScript==
@@ -103,6 +104,34 @@ function MD(){
   return '# '+document.title+'\n'+location.href+'\n\n'+r;
 }
 
+// ID: adresteki dosyayi indirir. Baska alandaysa GM_xmlhttpRequest ile
+// blob cekilir (tarayici capraz alanda download'u yok sayar).
+function ID(u){
+  var ad=(u.split(/[?#]/)[0].split('/').pop()||'dosya');
+  try{ad=decodeURIComponent(ad)}catch(e){}
+  ad=ad.replace(/[\\\/:*?"<>|]/g,'_').substr(0,80)||'dosya';
+  function ver(h,a){
+    var x=document.createElement('a');
+    x.href=h;x.download=a;
+    document.body.appendChild(x);x.click();x.parentNode.removeChild(x);
+  }
+  if(/^(blob|data):/.test(u)){ver(u,ad.indexOf('.')<0?ad+'.bin':ad);N('indiriliyor');return}
+  if(typeof GM_xmlhttpRequest!='function'){window.open(u,'_blank');return}
+  N('indiriliyor\u2026');
+  GM_xmlhttpRequest({method:'GET',url:u,responseType:'blob',anonymous:true,
+    onload:function(r){
+      if(r.status<200||r.status>=300||!r.response){N('indirilemedi ('+r.status+'), a\u00e7\u0131l\u0131yor');window.open(u,'_blank');return}
+      var b=r.response;
+      if(ad.indexOf('.')<0&&b.type)ad+='.'+b.type.split('/')[1].split(/[;+]/)[0];
+      var h=URL.createObjectURL(b);
+      ver(h,ad);
+      setTimeout(function(){URL.revokeObjectURL(h)},60000);
+      N('indirildi: '+Math.round(b.size/1024)+' KB');
+    },
+    onerror:function(){N('indirilemedi, a\u00e7\u0131l\u0131yor');window.open(u,'_blank')}
+  });
+}
+
 // LS: sayfadaki medya kaynaklarini listeler (acik ise kapatir)
 // Mantik: gyng/list-sources, MIT, Copyright (c) 2017 Ng Guoyou
 function LS(){
@@ -117,6 +146,21 @@ function LS(){
   kp.style.cssText='padding:10px;color:'+AYAR.vurgu+';font-weight:bold';
   kp.onclick=function(){P.parentNode.removeChild(P)};
   P.appendChild(kp);
+  var on=document.createElement('div'),onU='';
+  on.style.cssText='position:sticky;top:0;background:#000;display:none;text-align:center;z-index:1;margin-bottom:6px';
+  P.appendChild(on);
+  function izle(u,tip){
+    on.textContent='';
+    if(onU==u){on.style.display='none';onU='';return}
+    onU=u;
+    var v=document.createElement(tip=='img'?'img':(tip=='audio'?'audio':'video'));
+    v.src=u;
+    v.style.cssText='max-width:100%;max-height:40vh;display:block;margin:0 auto';
+    if(tip!='img'){v.controls=true;v.autoplay=true}
+    on.appendChild(v);
+    on.style.display='block';
+    P.scrollTop=0;
+  }
 
   function satir(u,tip,el){
     if(!u||gor[u])return null;
@@ -140,7 +184,9 @@ function LS(){
     var alt=document.createElement('div');
     alt.style.cssText='color:#888;margin-top:2px';
     var bil=document.createElement('span');
-    function dg(y,f){var d=document.createElement('span');d.textContent=y;d.style.cssText='margin-right:12px;font-size:16px';d.onclick=f;alt.appendChild(d)}
+    function dg(y,f){var d=document.createElement('span');d.textContent=y;d.style.cssText='margin-right:14px;font-size:18px';d.onclick=f;alt.appendChild(d)}
+    dg('\u25B6',function(){izle(u,tip)});
+    dg('\u{1F4BE}',function(){ID(u)});
     if(el&&el!==document.body)dg('\u{1F441}',function(){
       P.parentNode.removeChild(P);
       el.scrollIntoView({behavior:'smooth',block:'center'});
