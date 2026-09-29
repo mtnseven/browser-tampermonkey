@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.3
+// @version      1.4
 // @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
@@ -60,7 +60,7 @@ function B(i){
 
 function V(i){
   var u=B(i);
-  if(!u){N('Video: kaynak adresi yok');return}
+  if(!u){N('\u00d6nce videoyu ba\u015flat, sonra simgeye tekrar bas',5);return}
   if(u.indexOf('blob:')===0||u.indexOf('mediastream:')===0){N('Video: akis (blob:), desteklenmiyor');return}
   var p=A(u);if(!/\.(mp4|webm|ogv|mov)$/i.test(p))p=p.replace(/\.jpg$/,'')+'.mp4';
   N('Video: dogrudan adres, indiriliyor',4);Y(u,p)
