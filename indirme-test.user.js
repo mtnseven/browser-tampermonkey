@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.2
+// @version      1.3
 // @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
@@ -35,14 +35,19 @@ function R(){
 
 function A(u){
   var p=(u.split('?')[0].split('/').pop()||'resim').replace(/[^\w.\-]/g,'_');
-  if(!/\.(jpe?g|png|gif|webp|mp4|webm|mov)$/i.test(p))p+='.jpg';
+  if(!/\.(jpe?g|png|gif|webp|mp4|webm|ogv|mov)$/i.test(p))p+='.jpg';
   return p
 }
 
 function B(i){
   if(i.tagName==='VIDEO'){
     var v=i.currentSrc||i.src;
-    if(!v){var so=i.querySelector('source');if(so)v=so.src}
+    if(!v){var so=i.querySelector('source[src]');if(so)v=so.src}
+    if(!v)v=i.getAttribute('data-src')||'';
+    if(!v){
+      var e=performance.getEntriesByType('resource').filter(function(x){return /\.(mp4|webm|ogv|mov)(\?|$)/i.test(x.name)});
+      if(e.length){v=e[e.length-1].name;N('Kaynak sayfa kayitlarindan bulundu',4)}
+    }
     return v||''
   }
   var u=i.currentSrc||i.src,ss=i.getAttribute('srcset'),m=0;
@@ -57,7 +62,7 @@ function V(i){
   var u=B(i);
   if(!u){N('Video: kaynak adresi yok');return}
   if(u.indexOf('blob:')===0||u.indexOf('mediastream:')===0){N('Video: akis (blob:), desteklenmiyor');return}
-  var p=A(u);if(!/\.(mp4|webm|mov)$/i.test(p))p=p.replace(/\.jpg$/,'')+'.mp4';
+  var p=A(u);if(!/\.(mp4|webm|ogv|mov)$/i.test(p))p=p.replace(/\.jpg$/,'')+'.mp4';
   N('Video: dogrudan adres, indiriliyor',4);Y(u,p)
 }
 
@@ -88,7 +93,10 @@ function S(i){
     k.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();if(i.tagName==='VIDEO')V(i);else Y(B(i))},true);
     document.body.appendChild(k);HR.set(i,k)
   }
-  k.style.top=(r.top+scrollY+4)+'px';k.style.left=(r.right+scrollX-32)+'px';
+  var f=document.fullscreenElement,kp=f||document.body;
+  if(k.parentNode!==kp)kp.appendChild(k);
+  k.style.position=f?'fixed':'absolute';
+  k.style.top=(r.top+(f?0:scrollY)+4)+'px';k.style.left=(r.right+(f?0:scrollX)-32)+'px';
   return k
 }
 
@@ -116,4 +124,5 @@ E();document.body.appendChild(b);
 
 T();setInterval(T,1500);
 addEventListener('resize',T);
+document.addEventListener('fullscreenchange',function(){setTimeout(T,300)});
 })();
