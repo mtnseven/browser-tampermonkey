@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.0
-// @description  Medya Indir on kosulu: GM_download ve blob indirme yollarini mobilde sinar. Gecici betik.
+// @version      1.1
+// @description  Medya Indir simge testi: sabit simge ile dokununca beliren simgeyi karsilastirir. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
 // @noframes
-// @grant        GM_download
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      *
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/indirme-test.user.js
@@ -38,38 +39,67 @@ function A(u){
   return p
 }
 
-function Y1(u){
-  try{
-    GM_download({url:u,name:'test1_'+A(u),headers:{Referer:location.href},
-      onload:function(){N('1 GM_download: TAMAM')},
-      onerror:function(e){N('1 GM_download: HATA '+(e&&(e.error||e.details)||'?'))}
-    })
-  }catch(e){N('1 GM_download: '+e.message)}
+function B(i){
+  var u=i.currentSrc||i.src,ss=i.getAttribute('srcset'),m=0;
+  if(ss)ss.split(',').forEach(function(p){
+    var q=p.trim().split(/\s+/),w=parseFloat(q[1])||0;
+    if(q[0]&&w>m){m=w;u=new URL(q[0],location.href).href}
+  });
+  return u
 }
 
-function Y2(u){
-  GM_xmlhttpRequest({method:'GET',url:u,responseType:'blob',anonymous:true,
+function Y(u){
+  N('Indiriliyor...',3);
+  GM_xmlhttpRequest({method:'GET',url:u,responseType:'blob',anonymous:true,headers:{Referer:location.href},
     onload:function(r){
-      if(r.status!==200){N('2 blob: durum '+r.status);return}
+      if(r.status!==200){N('Durum '+r.status+', yeni sekmede aciliyor');window.open(u,'_blank');return}
       var x=URL.createObjectURL(r.response),a=document.createElement('a');
-      a.href=x;a.download='test2_'+A(u);document.body.appendChild(a);a.click();a.remove();
+      a.href=x;a.download=A(u);document.body.appendChild(a);a.click();a.remove();
       setTimeout(function(){URL.revokeObjectURL(x)},30000);
-      N('2 blob: tiklandi ('+Math.round(r.response.size/1024)+' KB)')
+      N('Indirildi ('+Math.round(r.response.size/1024)+' KB)')
     },
-    onerror:function(){N('2 blob: ag hatasi')}
+    onerror:function(){N('Ag hatasi')}
   })
 }
 
+var MOD=GM_getValue('mod','sabit'),ES=100,HR=new Map();
+
+function S(i){
+  var r=i.getBoundingClientRect();
+  if(r.width<ES||r.height<ES)return null;
+  var k=HR.get(i);
+  if(!k){
+    k=document.createElement('div');k.textContent='\u2B07';
+    k.style.cssText='position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font:16px sans-serif;display:flex;align-items:center;justify-content:center;z-index:'+Z+';cursor:pointer';
+    k.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();Y(B(i))},true);
+    document.body.appendChild(k);HR.set(i,k)
+  }
+  k.style.top=(r.top+scrollY+4)+'px';k.style.left=(r.right+scrollX-32)+'px';
+  return k
+}
+
+function T(){
+  HR.forEach(function(k,i){if(!i.isConnected||MOD!=='sabit'){k.remove();HR.delete(i)}});
+  if(MOD==='sabit')document.querySelectorAll('img').forEach(S)
+}
+
+document.addEventListener('click',function(e){
+  if(MOD!=='dokun')return;
+  var i=e.target.closest&&e.target.closest('img');
+  if(!i)return;
+  var k=HR.get(i);
+  if(k&&k.isConnected)return;
+  k=S(i);if(!k)return;
+  e.preventDefault();e.stopPropagation();
+  setTimeout(function(){k.remove();HR.delete(i)},4000)
+},true);
+
 var b=document.createElement('div');
-b.textContent='\u2B07\uFE0F';
-b.style.cssText='position:fixed;left:14px;bottom:90px;width:46px;height:46px;border-radius:50%;background:#1565c0;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:'+Z+';box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer';
-b.onclick=function(){
-  var i=R();
-  if(!i){N('Sayfada resim bulunamadi');return}
-  var u=i.currentSrc;
-  N('Hedef: '+i.naturalWidth+'x'+i.naturalHeight+' '+u,10);
-  Y1(u);
-  setTimeout(function(){Y2(u)},3000)
-};
-document.body.appendChild(b);
+b.style.cssText='position:fixed;left:14px;bottom:90px;padding:10px 14px;border-radius:22px;background:#1565c0;color:#fff;font:bold 14px sans-serif;z-index:'+Z+';box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer';
+function E(){b.textContent=MOD==='sabit'?'Mod: SABIT':'Mod: DOKUN'}
+b.onclick=function(){MOD=MOD==='sabit'?'dokun':'sabit';GM_setValue('mod',MOD);E();T();N('Mod degisti: '+MOD,3)};
+E();document.body.appendChild(b);
+
+T();setInterval(T,1500);
+addEventListener('resize',T);
 })();
