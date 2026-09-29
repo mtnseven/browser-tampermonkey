@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      6.3
+// @version      6.4
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -207,23 +207,32 @@ function LS(){
     return r;
   }
 
-  function bolum(ad,liste,tip){
-    var b=document.createElement('div'),n=0;
-    for(var i=0;i<liste.length;i++){
-      var r=satir(liste[i][0],tip,liste[i][1]);
-      if(r){b.appendChild(r);n++}
-    }
-    if(!n)return;
-    var h=document.createElement('div');
-    h.textContent=ad+' ('+n+')';
-    h.style.cssText='font:bold 15px sans-serif;margin:12px 0 6px;color:#fff';
-    P.appendChild(h);P.appendChild(b);
+  var sec={};
+  function ekle(u,tip,el){
+    var s=sec[tip],r=satir(u,tip,el);
+    if(!r)return;
+    s.b.appendChild(r);s.n++;
+    s.h.textContent=s.ad+' ('+s.n+')';
+    s.h.style.display='block';
+    if(y.parentNode)y.parentNode.removeChild(y);
   }
+  function bolum(ad,liste,tip){
+    var h=document.createElement('div'),b=document.createElement('div');
+    h.style.cssText='font:bold 15px sans-serif;margin:12px 0 6px;color:#fff;display:none';
+    P.appendChild(h);P.appendChild(b);
+    sec[tip]={h:h,b:b,n:0,ad:ad};
+    for(var i=0;i<liste.length;i++)ekle(liste[i][0],tip,liste[i][1]);
+  }
+  function medyaMi(e){return /\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd)(\?|#|$)/i.test(e.name)||e.initiatorType=='video'||e.initiatorType=='audio'}
+  var y=document.createElement('div');
+  y.textContent='Medya bulunamad\u0131 (liste a\u00e7\u0131kken taramaya devam ediyor)';
+  y.style.cssText='padding:10px';
 
   function medya(sec){
     var l=[],E=document.querySelectorAll(sec);
     for(var i=0;i<E.length;i++){
       var e=E[i],u=e.currentSrc||e.src;
+      if(P.contains(e))continue;
       if(u)l.push([u,e]);
       var s=e.querySelectorAll('source');
       for(var j=0;j<s.length;j++)if(s[j].src)l.push([s[j].src,e]);
@@ -244,15 +253,45 @@ function LS(){
 
   var tar=[],R=performance.getEntriesByType?performance.getEntriesByType('resource'):[];
   for(var k=0;k<R.length;k++){
-    if(/\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd)(\?|#|$)/i.test(R[k].name)||R[k].initiatorType=='video'||R[k].initiatorType=='audio')tar.push([R[k].name,null]);
+    if(medyaMi(R[k]))tar.push([R[k].name,null]);
   }
 
   bolum('\u{1F3A5} Video',medya('video'),'video');
   bolum('\u{1F4FB} Ses',medya('audio'),'audio');
   bolum('\u{1F50E} Taranan',tar,'tara');
   bolum('\u{1F4F7} Resim',res,'img');
-  if(!say){var y=document.createElement('div');y.textContent='Medya bulunamad\u0131';y.style.cssText='padding:10px';P.appendChild(y)}
+  if(!say)P.appendChild(y);
   document.body.appendChild(P);
+
+  // Liste acikken surekli tarama: oynatilan video, yeni yuklenen dosya, yeni resim
+  function tekrar(){
+    var l=medya('video');for(var i=0;i<l.length;i++)ekle(l[i][0],'video',l[i][1]);
+    l=medya('audio');for(i=0;i<l.length;i++)ekle(l[i][0],'audio',l[i][1]);
+    var I=document.querySelectorAll('img');
+    for(i=0;i<I.length;i++)if(!P.contains(I[i]))ekle(I[i].currentSrc||I[i].src,'img',I[i]);
+  }
+  function olay(e){var t=e.target;if(t&&(t.tagName=='VIDEO'||t.tagName=='AUDIO')&&!P.contains(t))setTimeout(tekrar,300)}
+  var gz=null;
+  try{if(performance.setResourceTimingBufferSize)performance.setResourceTimingBufferSize(3000)}catch(e){}
+  try{
+    gz=new PerformanceObserver(function(L){
+      var E=L.getEntries();
+      for(var i=0;i<E.length;i++)if(medyaMi(E[i]))ekle(E[i].name,'tara',null);
+    });
+    gz.observe({entryTypes:['resource']});
+  }catch(e){gz=null}
+  document.addEventListener('loadstart',olay,true);
+  document.addEventListener('play',olay,true);
+  var zm=setInterval(function(){
+    if(!document.getElementById('__ls')){
+      clearInterval(zm);
+      if(gz)gz.disconnect();
+      document.removeEventListener('loadstart',olay,true);
+      document.removeEventListener('play',olay,true);
+      return;
+    }
+    tekrar();
+  },1500);
 }
 
 // ===== ARAYUZ =====
