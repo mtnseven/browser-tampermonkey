@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.4
+// @version      1.5
 // @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
@@ -81,12 +81,19 @@ function Y(u,ad){
   })
 }
 
-var MOD=GM_getValue('mod','sabit'),ES=100,HR=new Map();
+var MOD=GM_getValue('mod','sabit'),ES=100,HR=new Map(),VR=[];
+
+function O(r){
+  return VR.some(function(v){
+    var w=Math.min(r.right,v.right)-Math.max(r.left,v.left),h=Math.min(r.bottom,v.bottom)-Math.max(r.top,v.top);
+    return w>0&&h>0&&w*h>=0.5*r.width*r.height
+  })
+}
 
 function S(i){
   var r=i.getBoundingClientRect();
-  if(r.width<ES||r.height<ES)return null;
   var k=HR.get(i);
+  if(r.width<ES||r.height<ES||(i.tagName==='IMG'&&O(r))){if(k){k.remove();HR.delete(i)}return null}
   if(!k){
     k=document.createElement('div');k.textContent='\u2B07';
     k.style.cssText='position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font:16px sans-serif;display:flex;align-items:center;justify-content:center;z-index:'+Z+';cursor:pointer';
@@ -102,6 +109,7 @@ function S(i){
 
 function T(){
   HR.forEach(function(k,i){if(!i.isConnected||MOD!=='sabit'){k.remove();HR.delete(i)}});
+  VR=[];document.querySelectorAll('video').forEach(function(v){var q=v.getBoundingClientRect();if(q.width>=ES&&q.height>=ES)VR.push(q)});
   if(MOD==='sabit')document.querySelectorAll('img,video').forEach(S)
 }
 
