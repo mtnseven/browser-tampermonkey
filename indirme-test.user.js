@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.5
+// @version      1.6
 // @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
 // @match        *://*/*
 // @run-at       document-end
@@ -90,12 +90,31 @@ function O(r){
   })
 }
 
+// GR: oge ekranda gercekten gorunuyor mu. Gorunen alanin ortasindaki
+// katmanlara bakilir; ustte ogenin kendi kartina (4 ust oge) ait olmayan bir
+// katman varsa (yuzen video penceresi) ya da nokta ogenin disinda kaldiysa
+// (kaydirmali seritte kirpilmis, gizli) simge konmaz.
+function GR(i,r){
+  var x1=Math.max(r.left,0),x2=Math.min(r.right,innerWidth),y1=Math.max(r.top,0),y2=Math.min(r.bottom,innerHeight);
+  if(x2-x1<ES/2||y2-y1<ES/2)return false;
+  var L=document.elementsFromPoint((x1+x2)/2,(y1+y2)/2),a=i,n=0;
+  while(a.parentElement&&a.parentElement!==document.body&&a.parentElement!==document.documentElement&&n<4){a=a.parentElement;n++}
+  for(var j=0;j<L.length;j++){
+    var e=L[j];
+    if(e.__ik)continue;
+    if(e===i)return true;
+    if(e.contains(i))return getComputedStyle(i).pointerEvents==='none';
+    if(!a.contains(e))return false;
+  }
+  return false
+}
+
 function S(i){
   var r=i.getBoundingClientRect();
   var k=HR.get(i);
-  if(r.width<ES||r.height<ES||(i.tagName==='IMG'&&O(r))){if(k){k.remove();HR.delete(i)}return null}
+  if(r.width<ES||r.height<ES||(i.tagName==='IMG'&&O(r))||!GR(i,r)){if(k){k.remove();HR.delete(i)}return null}
   if(!k){
-    k=document.createElement('div');k.textContent='\u2B07';
+    k=document.createElement('div');k.textContent='\u2B07';k.__ik=1;
     k.style.cssText='position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font:16px sans-serif;display:flex;align-items:center;justify-content:center;z-index:'+Z+';cursor:pointer';
     k.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();if(i.tagName==='VIDEO')V(i);else Y(B(i))},true);
     document.body.appendChild(k);HR.set(i,k)
@@ -132,5 +151,6 @@ E();document.body.appendChild(b);
 
 T();setInterval(T,1500);
 addEventListener('resize',T);
+var ZT;addEventListener('scroll',function(){clearTimeout(ZT);ZT=setTimeout(T,150)},true);
 document.addEventListener('fullscreenchange',function(){setTimeout(T,300)});
 })();
