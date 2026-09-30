@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      6.4
+// @version      6.5
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
+// @noframes
 // @grant        GM_xmlhttpRequest
 // @connect      *
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
@@ -22,17 +23,17 @@ var AYAR={
   vurgu:'#0f0'
 };
 
-// ===== KATEGORI: [ikon, ad, [maddeler]] =====
-// Madde: [ikon, ad, is anahtari]. Sira satir yeriyle degisir.
+// ===== KATEGORI =====
+// Kategori: [ikon, ad, [maddeler]]. Madde: [ikon, ad, is anahtari].
+// Ana menude dogrudan madde de durabilir (ucuncu oge is anahtari).
+// Sira satir yeriyle degisir.
 var KATEGORI=[
+  ['\u{1F50E}','Kaynaklar\u0131 listele','kaynakListe'],
   ['\u{1F4E4}','D\u0131\u015fa aktar',[
     ['\u{1F4BE}','Markdown indir','mdIndir'],
     ['\u{1F4CB}','Markdown kopyala','mdKopya'],
     ['\u{1F4C4}','Metin kopyala','txtKopya'],
     ['\u{1F310}','HTML indir','htmlIndir']
-  ]],
-  ['\u{1F5BC}','Medya',[
-    ['\u{1F50E}','Kaynaklar\u0131 listele','kaynakListe']
   ]]
 ];
 
@@ -134,111 +135,164 @@ function ID(u){
 
 // LS: sayfadaki medya kaynaklarini listeler (acik ise kapatir)
 // Mantik: gyng/list-sources, MIT, Copyright (c) 2017 Ng Guoyou
+// Arayuz Shadow DOM icinde: sayfanin CSS'i listeye karismaz.
 function LS(){
-  var P=document.getElementById('__ls');
-  if(P){P.parentNode.removeChild(P);return}
-  var gor={},say=0,renk={img:'#45a1ff',video:'#ff0039',audio:'#30e60b',tara:'#0ff'};
-  P=document.createElement('div');
-  P.id='__ls';
-  P.style.cssText='position:fixed;top:0;right:0;width:100%;max-width:480px;height:100%;overflow-y:auto;background:#1e1e1e;color:#ddd;font:13px sans-serif;z-index:2147483647;padding:8px;box-sizing:border-box';
-  var kp=document.createElement('div');
-  kp.textContent='\u2715  Kapat';
-  kp.style.cssText='padding:10px;color:'+AYAR.vurgu+';font-weight:bold';
-  kp.onclick=function(){P.parentNode.removeChild(P)};
-  P.appendChild(kp);
-  var on=document.createElement('div'),onU='';
-  on.style.cssText='position:sticky;top:0;background:#000;display:none;text-align:center;z-index:1;margin-bottom:6px';
-  P.appendChild(on);
-  function izle(u,tip){
-    on.textContent='';
-    if(onU==u){on.style.display='none';onU='';return}
-    onU=u;
-    var v=document.createElement(tip=='img'?'img':(tip=='audio'?'audio':'video'));
-    v.src=u;
-    v.style.cssText='max-width:100%;max-height:40vh;display:block;margin:0 auto';
-    if(tip!='img'){v.controls=true;v.autoplay=true}
-    on.appendChild(v);
-    on.style.display='block';
-    P.scrollTop=0;
+  var H=document.getElementById('__ls');
+  if(H){H.parentNode.removeChild(H);return}
+  H=document.createElement('div');H.id='__ls';
+  H.style.cssText='position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647';
+  var D=H.attachShadow?H.attachShadow({mode:'open'}):H;
+  var st=document.createElement('style');
+  st.textContent='*{box-sizing:border-box;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'+
+    '.p{position:fixed;top:0;right:0;width:100%;max-width:460px;height:100%;display:flex;flex-direction:column;background:#16181d;color:#e6e6e6;font-size:13px;box-shadow:-4px 0 24px rgba(0,0,0,.5);border-left:1px solid #2a2d35}'+
+    '.bs{flex:none;padding:12px 14px 10px;background:#1c1f26;border-bottom:1px solid #2a2d35}'+
+    '.ust{display:flex;align-items:center;justify-content:space-between;gap:10px}'+
+    '.bl{font-size:16px;font-weight:600}.bl small{font-size:12px;font-weight:400;color:#9aa0aa;margin-left:6px}'+
+    '.kp{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:#2a2d35;color:#fff;font-size:16px;cursor:pointer}.kp:hover{background:#e5484d}'+
+    '.sek{display:flex;gap:6px;margin-top:10px;overflow-x:auto}'+
+    '.sk{flex:none;padding:5px 11px;border-radius:14px;background:#2a2d35;color:#bbb;font-size:12px;cursor:pointer;border:0}.sk.a{background:#3b82f6;color:#fff}'+
+    '.on{flex:none;display:none;position:relative;background:#000;border-bottom:1px solid #2a2d35}'+
+    '.on video,.on img,.on audio{display:block;max-width:100%;max-height:38vh;margin:0 auto}'+
+    '.on .uy{padding:14px;color:#f99}'+
+    '.onk{position:absolute;top:6px;right:6px;z-index:1;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:#fff;cursor:pointer}'+
+    '.gv{flex:1;overflow-y:auto;position:relative;padding:4px 10px 24px}'+
+    '.bb{margin:14px 2px 6px;font-size:11px;font-weight:600;color:#9aa0aa;text-transform:uppercase;letter-spacing:.6px}'+
+    '.kart{display:flex;gap:10px;padding:8px;margin:6px 0;background:#1f222a;border-radius:10px;border-left:3px solid #555}'+
+    '.kart.yeni{animation:y 2.5s}@keyframes y{from{background:#34405a}to{background:#1f222a}}'+
+    '.kc{width:56px;height:56px;flex:none;border-radius:6px;background:#000;object-fit:contain}'+
+    '.ki{min-width:0;flex:1}'+
+    '.ka{display:block;color:#8ab4ff;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+    '.kb{color:#888;font-size:11px;margin-top:3px}'+
+    '.dg{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}'+
+    '.d{padding:5px 9px;border-radius:6px;background:#2a2d35;color:#ddd;font-size:12px;cursor:pointer;border:0}.d:hover{background:#3b82f6;color:#fff}'+
+    '.bos{padding:16px;color:#888}'+
+    '.don{position:fixed;right:14px;top:14px;display:none;padding:10px 16px;border-radius:22px;background:#3b82f6;color:#fff;font-size:14px;border:0;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer}';
+  D.appendChild(st);
+  function el(t,c,y){var e=document.createElement(t);if(c)e.className=c;if(y)e.textContent=y;return e}
+
+  var gor={},say=0,filtre='',renk={video:'#ff4d6d',audio:'#30e60b',tara:'#22d3ee',img:'#60a5fa'};
+  var ADI={video:'Video',audio:'Ses',tara:'Taranan',img:'Resim'},SIRA=['video','audio','tara','img'];
+  var P=el('div','p'),BS=el('div','bs'),UST=el('div','ust'),BL=el('div','bl','Kaynaklar'),SAY=el('small');
+  BL.appendChild(SAY);
+  var KP=el('button','kp','\u2715');KP.title='Kapat';
+  KP.onclick=function(){H.parentNode.removeChild(H)};
+  UST.appendChild(BL);UST.appendChild(KP);BS.appendChild(UST);
+  var SEK=el('div','sek');BS.appendChild(SEK);
+  var ON=el('div','on'),G=el('div','gv'),Y=el('div','bos','Medya bulunamad\u0131 (liste a\u00e7\u0131kken taramaya devam ediyor)');
+  var DON=el('button','don','\u21A9  Listeye d\u00f6n');
+  P.appendChild(BS);P.appendChild(ON);P.appendChild(G);
+  D.appendChild(P);D.appendChild(DON);
+  DON.onclick=function(){P.style.display='flex';DON.style.display='none'};
+
+  var sec={},skD={};
+  function sekme(k,ad){
+    var b=el('button','sk',ad);b.onclick=function(){filtre=k;cizF()};
+    SEK.appendChild(b);skD[k]=b;
+  }
+  function cizF(){
+    for(var k in skD)skD[k].className='sk'+(k==filtre?' a':'');
+    for(var i=0;i<SIRA.length;i++){var s=sec[SIRA[i]];var g=s.n&&(!filtre||filtre==SIRA[i]);s.h.style.display=g?'block':'none';s.b.style.display=g?'block':'none'}
+    G.scrollTop=0;
+  }
+  function sayac(){
+    SAY.textContent=say+' \u00f6\u011fe';skD[''].textContent='T\u00fcm\u00fc '+say;
+    for(var i=0;i<SIRA.length;i++){var s=sec[SIRA[i]];skD[SIRA[i]].textContent=ADI[SIRA[i]]+' '+s.n;skD[SIRA[i]].style.display=s.n?'':'none'}
   }
 
-  function satir(u,tip,el){
-    if(!u||gor[u])return null;
-    gor[u]=1;say++;
-    var r=document.createElement('div');
-    r.style.cssText='display:flex;align-items:center;margin:4px 0;border-left:3px solid '+renk[tip]+';padding-left:4px';
+  var onU='';
+  function izle(u,tip){
+    ON.textContent='';
+    if(onU==u){ON.style.display='none';onU='';return}
+    onU=u;ON.style.display='block';
+    var k=el('button','onk','\u2715');k.onclick=function(){ON.textContent='';ON.style.display='none';onU=''};
+    ON.appendChild(k);
+    if(/^(blob|mediastream):/.test(u)||/\.(m3u8|mpd)(\?|#|$)/i.test(u)){ON.appendChild(el('div','uy','Ak\u0131\u015f kayna\u011f\u0131, burada oynat\u0131lamaz'));return}
+    var v=el(tip=='img'?'img':(tip=='audio'?'audio':'video'));
+    v.onerror=function(){ON.appendChild(el('div','uy','Oynat\u0131lamad\u0131 (kaynak reddetti veya bi\u00e7im desteklenmiyor)'))};
+    if(tip!='img'){v.controls=true;v.setAttribute('playsinline','')}
+    v.src=u;ON.appendChild(v);
+    if(tip!='img'&&v.play){var pr=v.play();if(pr&&pr.catch)pr.catch(function(){})}
+  }
+  function goster(e){
+    P.style.display='none';DON.style.display='block';
+    e.scrollIntoView({behavior:'smooth',block:'center'});
+    var o=e.style.outline;e.style.outline='5px solid #ff0039';
+    setTimeout(function(){e.style.outline=o},3000);
+  }
+
+  // Ayni adres once Taranan'da cikip sonra video ogesinde bulunursa Video'ya tasinir
+  function satir(u,tip,e){
+    if(!u)return null;
+    var g=gor[u];
+    if(g){
+      if(!(g.t=='tara'&&(tip=='video'||tip=='audio')))return null;
+      if(g.r.parentNode)g.r.parentNode.removeChild(g.r);
+      sec.tara.n--;say--;sec.tara.h.textContent=ADI.tara+' ('+sec.tara.n+')';cizF2('tara');
+    }
+    say++;
+    var r=el('div','kart');r.style.borderLeftColor=renk[tip];
     var t=null;
     if(say<150){
-      t=document.createElement(tip=='img'?'img':(tip=='audio'?'audio':'video'));
-      t.style.cssText='width:40px;height:40px;min-width:40px;object-fit:contain;margin-right:6px;background:#000';
-      t.setAttribute('preload','metadata');
-      t.src=u;
+      t=el(tip=='img'?'img':(tip=='audio'?'audio':'video'),'kc');
+      t.setAttribute('preload','metadata');t.muted=true;t.src=u;
       r.appendChild(t);
     }
-    var sag=document.createElement('div');
-    sag.style.cssText='min-width:0;flex:1';
-    var a=document.createElement('a');
-    a.href=u;a.target='_blank';
-    a.textContent=u.indexOf('data:')==0?u.substr(0,60)+'\u2026':u;
-    a.style.cssText='display:block;color:#6cb6ff;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-    var alt=document.createElement('div');
-    alt.style.cssText='color:#888;margin-top:2px';
-    var bil=document.createElement('span');
-    function dg(y,f){var d=document.createElement('span');d.textContent=y;d.style.cssText='margin-right:14px;font-size:18px';d.onclick=f;alt.appendChild(d)}
-    dg('\u25B6',function(){izle(u,tip)});
-    dg('\u{1F4BE}',function(){ID(u)});
-    if(el&&el!==document.body)dg('\u{1F441}',function(){
-      P.parentNode.removeChild(P);
-      el.scrollIntoView({behavior:'smooth',block:'center'});
-      var o=el.style.outline;el.style.outline='5px solid #ff0039';
-      setTimeout(function(){el.style.outline=o},3000);
-    });
-    dg('\u{1F4CB}',function(){K(u,'Adres')});
-    alt.appendChild(bil);
+    var ki=el('div','ki'),a=el('a','ka',u.indexOf('data:')==0?u.substr(0,60)+'\u2026':u);
+    a.href=u;a.target='_blank';a.title=u;
+    var kb=el('div','kb',ADI[tip]),dg=el('div','dg');
+    function d(y,f,ip){var b=el('button','d',y);b.title=ip;b.onclick=function(x){x.stopPropagation();f()};dg.appendChild(b)}
+    d('\u25B6 \u0130zle',function(){izle(u,tip)},'Listenin \u00fcst\u00fcnde \u00f6nizle');
+    d('\u2B07 \u0130ndir',function(){ID(u)},'Dosyay\u0131 indir');
+    if(e&&e!==document.body)d('\u{1F441} G\u00f6ster',function(){goster(e)},'Sayfada nerede oldu\u011funu g\u00f6ster');
+    d('\u{1F4CB} Kopyala',function(){K(u,'Adres')},'Adresi kopyala');
     if(t){
-      if(tip=='img')t.onload=function(){bil.textContent=t.naturalWidth+'\u00d7'+t.naturalHeight};
+      if(tip=='img')t.onload=function(){kb.textContent=ADI[tip]+' \u00b7 '+t.naturalWidth+'\u00d7'+t.naturalHeight};
       else t.onloadedmetadata=function(){
-        var x=t.duration&&isFinite(t.duration)?Math.round(t.duration)+'s':'';
-        if(t.videoHeight)x+=(x?' \u00b7 ':'')+t.videoWidth+'\u00d7'+t.videoHeight;
-        bil.textContent=x;
+        var x=ADI[tip];
+        if(t.duration&&isFinite(t.duration))x+=' \u00b7 '+Math.round(t.duration)+' sn';
+        if(t.videoHeight)x+=' \u00b7 '+t.videoWidth+'\u00d7'+t.videoHeight;
+        kb.textContent=x;
       };
     }
-    sag.appendChild(a);sag.appendChild(alt);r.appendChild(sag);
+    ki.appendChild(a);ki.appendChild(kb);ki.appendChild(dg);r.appendChild(ki);
+    gor[u]={t:tip,r:r};
     return r;
   }
 
-  var sec={};
-  function ekle(u,tip,el){
-    var s=sec[tip],r=satir(u,tip,el);
+  // yeni: tarama sirasinda bulunan video/taranan ogesi; en uste konur, liste oraya kayar
+  function ekle(u,tip,e,yeni){
+    var s=sec[tip],r=satir(u,tip,e);
     if(!r)return;
-    s.b.appendChild(r);s.n++;
-    s.h.textContent=s.ad+' ('+s.n+')';
-    s.h.style.display='block';
-    if(y.parentNode)y.parentNode.removeChild(y);
+    if(yeni&&(tip=='video'||tip=='tara')){
+      s.b.insertBefore(r,s.b.firstChild);r.className+=' yeni';
+    }else s.b.appendChild(r);
+    s.n++;s.h.textContent=ADI[tip]+' ('+s.n+')';
+    if(Y.parentNode)Y.parentNode.removeChild(Y);
+    sayac();cizF2(tip);
+    if(yeni&&(tip=='video'||tip=='tara')&&(!filtre||filtre==tip))G.scrollTop=Math.max(0,s.h.offsetTop-6);
   }
-  function bolum(ad,liste,tip){
-    var h=document.createElement('div'),b=document.createElement('div');
-    h.style.cssText='font:bold 15px sans-serif;margin:12px 0 6px;color:#fff;display:none';
-    P.appendChild(h);P.appendChild(b);
-    sec[tip]={h:h,b:b,n:0,ad:ad};
-    for(var i=0;i<liste.length;i++)ekle(liste[i][0],tip,liste[i][1]);
-  }
-  function medyaMi(e){return /\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd)(\?|#|$)/i.test(e.name)||e.initiatorType=='video'||e.initiatorType=='audio'}
-  var y=document.createElement('div');
-  y.textContent='Medya bulunamad\u0131 (liste a\u00e7\u0131kken taramaya devam ediyor)';
-  y.style.cssText='padding:10px';
+  function cizF2(tip){var s=sec[tip],g=s.n&&(!filtre||filtre==tip);s.h.style.display=g?'block':'none';s.b.style.display=g?'block':'none'}
 
-  function medya(sec){
-    var l=[],E=document.querySelectorAll(sec);
+  sekme('','T\u00fcm\u00fc');
+  for(var q=0;q<SIRA.length;q++){
+    var h=el('div','bb'),b=el('div');h.style.display='none';
+    G.appendChild(h);G.appendChild(b);
+    sec[SIRA[q]]={h:h,b:b,n:0};
+    sekme(SIRA[q],ADI[SIRA[q]]);
+  }
+
+  function medyaMi(e){return /\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd)(\?|#|$)/i.test(e.name)||e.initiatorType=='video'||e.initiatorType=='audio'}
+  function medya(sc){
+    var l=[],E=document.querySelectorAll(sc);
     for(var i=0;i<E.length;i++){
       var e=E[i],u=e.currentSrc||e.src;
-      if(P.contains(e))continue;
       if(u)l.push([u,e]);
       var s=e.querySelectorAll('source');
       for(var j=0;j<s.length;j++)if(s[j].src)l.push([s[j].src,e]);
     }
     return l;
   }
+  function yukle(l,tip){for(var i=0;i<l.length;i++)ekle(l[i][0],tip,l[i][1])}
 
   var res=[],T=document.querySelectorAll('*');
   for(var i=0;i<T.length;i++){
@@ -250,33 +304,31 @@ function LS(){
       while((m=rx.exec(bg)))res.push([m[1],e]);
     }
   }
-
   var tar=[],R=performance.getEntriesByType?performance.getEntriesByType('resource'):[];
-  for(var k=0;k<R.length;k++){
-    if(medyaMi(R[k]))tar.push([R[k].name,null]);
-  }
+  for(var k=0;k<R.length;k++)if(medyaMi(R[k]))tar.push([R[k].name,null]);
 
-  bolum('\u{1F3A5} Video',medya('video'),'video');
-  bolum('\u{1F4FB} Ses',medya('audio'),'audio');
-  bolum('\u{1F50E} Taranan',tar,'tara');
-  bolum('\u{1F4F7} Resim',res,'img');
-  if(!say)P.appendChild(y);
-  document.body.appendChild(P);
+  yukle(medya('video'),'video');
+  yukle(medya('audio'),'audio');
+  yukle(tar,'tara');
+  yukle(res,'img');
+  if(!say)G.appendChild(Y);
+  sayac();cizF();
+  document.body.appendChild(H);
 
   // Liste acikken surekli tarama: oynatilan video, yeni yuklenen dosya, yeni resim
   function tekrar(){
-    var l=medya('video');for(var i=0;i<l.length;i++)ekle(l[i][0],'video',l[i][1]);
+    var l=medya('video');for(var i=0;i<l.length;i++)ekle(l[i][0],'video',l[i][1],1);
     l=medya('audio');for(i=0;i<l.length;i++)ekle(l[i][0],'audio',l[i][1]);
     var I=document.querySelectorAll('img');
-    for(i=0;i<I.length;i++)if(!P.contains(I[i]))ekle(I[i].currentSrc||I[i].src,'img',I[i]);
+    for(i=0;i<I.length;i++)ekle(I[i].currentSrc||I[i].src,'img',I[i]);
   }
-  function olay(e){var t=e.target;if(t&&(t.tagName=='VIDEO'||t.tagName=='AUDIO')&&!P.contains(t))setTimeout(tekrar,300)}
+  function olay(e){var t=e.target;if(t&&(t.tagName=='VIDEO'||t.tagName=='AUDIO'))setTimeout(tekrar,300)}
   var gz=null;
   try{if(performance.setResourceTimingBufferSize)performance.setResourceTimingBufferSize(3000)}catch(e){}
   try{
     gz=new PerformanceObserver(function(L){
       var E=L.getEntries();
-      for(var i=0;i<E.length;i++)if(medyaMi(E[i]))ekle(E[i].name,'tara',null);
+      for(var i=0;i<E.length;i++)if(medyaMi(E[i]))ekle(E[i].name,'tara',null,1);
     });
     gz.observe({entryTypes:['resource']});
   }catch(e){gz=null}
@@ -314,21 +366,25 @@ function S(y,f,ek){
   M.appendChild(d);
 }
 
-// k yoksa kategori listesi, varsa o kategorinin maddeleri
+// Maddeyi calistirir
+function CAL(t){
+  M.style.display='none';
+  try{ISLER[t[2]]()}catch(x){N('hata: '+x.message)}
+}
+
+// k yoksa ana liste (kategoriler + dogrudan maddeler), varsa o kategorinin maddeleri
 function CIZ(k){
   M.textContent='';
   if(!k){
     for(var i=0;i<KATEGORI.length;i++)(function(c){
-      S(c[0]+'  '+c[1]+'  \u203A',function(){CIZ(c)});
+      if(typeof c[2]=='string')S(c[0]+'  '+c[1],function(){CAL(c)});
+      else S(c[0]+'  '+c[1]+'  \u203A',function(){CIZ(c)});
     })(KATEGORI[i]);
     return;
   }
   S('\u2039  '+k[1],function(){CIZ()},'color:'+AYAR.vurgu);
   for(var j=0;j<k[2].length;j++)(function(t){
-    S(t[0]+'  '+t[1],function(){
-      M.style.display='none';
-      try{ISLER[t[2]]()}catch(x){N('hata: '+x.message)}
-    });
+    S(t[0]+'  '+t[1],function(){CAL(t)});
   })(k[2][j]);
 }
 
