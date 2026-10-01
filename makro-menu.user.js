@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      7.2
+// @version      7.3
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -396,12 +396,23 @@ function LS(){
     }
     return l;
   }
+  // Tembel resim: gercek adres data-* ozniteliginde bekler, src yer tutucudur
+  function rAd(i){
+    var u=i.currentSrc||i.src||'',ss=i.getAttribute('data-srcset'),m=0,t;
+    if(ss)ss.split(',').forEach(function(p){
+      var q=p.trim().split(/\s+/),w=parseFloat(q[1])||1;
+      if(q[0]&&w>m){m=w;t=q[0]}
+    });
+    t=t||i.getAttribute('data-src')||i.getAttribute('data-lazy-src')||i.getAttribute('data-original')||i.getAttribute('data-lazy');
+    if(t&&!/^data:/.test(t)){try{t=new URL(t,location.href).href}catch(x){t=''}if(t&&t!=u)return t}
+    return u;
+  }
   function yukle(l,tip){for(var i=0;i<l.length;i++)ekle(l[i][0],tip,l[i][1])}
 
   var res=[],T=document.querySelectorAll('*');
   for(var i=0;i<T.length;i++){
     var e=T[i];
-    if(e.tagName=='IMG'&&(e.currentSrc||e.src))res.push([e.currentSrc||e.src,e]);
+    if(e.tagName=='IMG'){var ru=rAd(e);if(ru)res.push([ru,e])}
     var bg=getComputedStyle(e).backgroundImage;
     if(bg&&bg!='none'){
       var m,rx=/url\(["']?(.*?)["']?\)/g;
@@ -428,7 +439,7 @@ function LS(){
     var l=medya('video');for(var i=0;i<l.length;i++)ekle(l[i][0],'video',l[i][1],1);
     l=medya('audio');for(i=0;i<l.length;i++)ekle(l[i][0],'audio',l[i][1]);
     var I=document.querySelectorAll('img');
-    for(i=0;i<I.length;i++)ekle(I[i].currentSrc||I[i].src,'img',I[i]);
+    for(i=0;i<I.length;i++)ekle(rAd(I[i]),'img',I[i]);
   }
   function olay(e){var t=e.target;if(t&&(t.tagName=='VIDEO'||t.tagName=='AUDIO'))setTimeout(tekrar,300)}
   var gz=null;
