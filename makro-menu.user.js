@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      7.3
+// @version      7.4
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -131,6 +131,122 @@ function ID(u){
     },
     onerror:function(){N('indirilemedi, a\u00e7\u0131l\u0131yor');window.open(u,'_blank')}
   });
+}
+
+// HLS: m3u8 akisini tek dosya olarak indirir. Ana listede en yuksek bant
+// genisligi secilir; parcalar 4'erli cekilip sirayla birlestirilir.
+// Sifre: yalniz AES-128 (WebCrypto). DRM, canli yayin, BYTERANGE: hayir.
+function GX(u,tip){
+  return new Promise(function(ok,no){
+    GM_xmlhttpRequest({method:'GET',url:u,responseType:tip||'text',anonymous:true,headers:{Referer:location.href},
+      onload:function(r){if(r.status>=200&&r.status<300)ok(tip?r.response:r.responseText);else no(new Error('HTTP '+r.status))},
+      onerror:function(){no(new Error('a\u011f hatas\u0131'))},
+      ontimeout:function(){no(new Error('zaman a\u015f\u0131m\u0131'))}
+    });
+  });
+}
+
+// NB: kalici ilerleme kutusu, iptal dugmeli
+function NB(t){
+  var d=document.createElement('div'),y=document.createElement('span'),x=document.createElement('span');
+  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:'+(AYAR.alt+110)+'px;background:#000;color:'+AYAR.vurgu+';padding:8px 12px;border-radius:6px;font:13px sans-serif;z-index:2147483647;display:flex;gap:12px;align-items:center';
+  x.textContent='\u2715';x.style.cssText='cursor:pointer;color:#fff;padding:0 4px';
+  d.appendChild(y);d.appendChild(x);document.body.appendChild(d);
+  var o={iptal:false,y:function(s){y.textContent=s},
+    bit:function(s,sn){y.textContent=s;x.style.display='none';setTimeout(function(){if(d.parentNode)d.parentNode.removeChild(d)},(sn||4)*1000)}};
+  x.onclick=function(e){e.stopPropagation();o.iptal=true;o.bit('HLS iptal edildi',2)};
+  o.y(t);return o;
+}
+
+function HLS(u){
+  if(HLS.on){N('bir HLS indirmesi s\u00fcr\u00fcyor');return}
+  if(typeof GM_xmlhttpRequest!='function'){N('GM_xmlhttpRequest yok');return}
+  HLS.on=true;
+  var o=NB('HLS: liste okunuyor\u2026'),uyari='';
+  function tam(x,b){return new URL(x,b).href}
+  function sat(t){return t.split(/\r?\n/).map(function(s){return s.trim()}).filter(Boolean)}
+  function oz(s,a){var m=s.match(new RegExp(a+'=("([^"]*)"|[^,]*)'));return m?(m[2]!=null?m[2]:m[1]):''}
+
+  function medya(t,b){
+    if(t.indexOf('#EXT-X-ENDLIST')<0)throw new Error('canl\u0131 yay\u0131n, indirilemez');
+    if(t.indexOf('#EXT-X-BYTERANGE')>=0)throw new Error('BYTERANGE desteklenmiyor');
+    var L=sat(t),P=[],k=null,map=null,sq=+(t.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/)||[0,0])[1];
+    for(var i=0;i<L.length;i++){
+      var s=L[i];
+      if(s.indexOf('#EXT-X-KEY')==0){
+        var me=oz(s,'METHOD');
+        if(me=='NONE')k=null;
+        else if(me=='AES-128')k={u:tam(oz(s,'URI'),b),iv:oz(s,'IV')};
+        else throw new Error('korumal\u0131 ak\u0131\u015f ('+me+')');
+      }else if(s.indexOf('#EXT-X-MAP')==0)map=tam(oz(s,'URI'),b);
+      else if(s[0]!='#')P.push({u:tam(s,b),k:k,sq:sq+P.length});
+    }
+    if(!P.length)throw new Error('par\u00e7a yok');
+    return {P:P,map:map};
+  }
+
+  var AN={};
+  function anahtar(k){
+    if(!AN[k.u])AN[k.u]=GX(k.u,'arraybuffer').then(function(b){return crypto.subtle.importKey('raw',b,'AES-CBC',false,['decrypt'])});
+    return AN[k.u];
+  }
+  function iv(p){
+    var a=new Uint8Array(16),j;
+    if(p.k.iv){var h=p.k.iv.replace(/^0x/i,'');while(h.length<32)h='0'+h;for(j=0;j<16;j++)a[j]=parseInt(h.substr(j*2,2),16)}
+    else{var s=p.sq;for(j=15;j>=12;j--){a[j]=s%256;s=Math.floor(s/256)}}
+    return a;
+  }
+  function bir(p,den){
+    return GX(p.u,'arraybuffer').then(function(b){
+      if(!p.k)return b;
+      return anahtar(p.k).then(function(k){return crypto.subtle.decrypt({name:'AES-CBC',iv:iv(p)},k,b)});
+    }).catch(function(e){if(den||o.iptal)throw e;return bir(p,1)});
+  }
+  function parcalar(P){
+    var out=new Array(P.length),i=0,bitti=0,boy=0,cal=0,dur=false;
+    return new Promise(function(ok,no){
+      function sonraki(){
+        if(dur)return;
+        if(o.iptal){dur=true;no(new Error('iptal'));return}
+        if(bitti==P.length){ok(out);return}
+        while(cal<4&&i<P.length)(function(n){
+          cal++;i++;
+          bir(P[n]).then(function(b){
+            out[n]=b;boy+=b.byteLength;bitti++;cal--;
+            o.y('HLS: '+bitti+'/'+P.length+' par\u00e7a \u00b7 '+(boy/1048576).toFixed(1)+' MB');
+            sonraki();
+          },function(e){dur=true;no(e)});
+        })(i);
+      }
+      sonraki();
+    });
+  }
+
+  GX(u).then(function(t){
+    if(t.indexOf('#EXTM3U')<0)throw new Error('m3u8 de\u011fil');
+    if(t.indexOf('#EXT-X-STREAM-INF')<0)return [t,u];
+    var L=sat(t),en=null,eb=-1,ag='';
+    for(var i=0;i<L.length;i++)if(L[i].indexOf('#EXT-X-STREAM-INF')==0){
+      var bw=+oz(L[i],'BANDWIDTH')||0,j=i+1;
+      while(j<L.length&&L[j][0]=='#')j++;
+      if(L[j]&&bw>eb){eb=bw;en=L[j];ag=oz(L[i],'AUDIO')}
+    }
+    if(!en)throw new Error('varyant yok');
+    if(ag)for(i=0;i<L.length;i++)if(L[i].indexOf('#EXT-X-MEDIA')==0&&oz(L[i],'TYPE')=='AUDIO'&&oz(L[i],'GROUP-ID')==ag&&oz(L[i],'URI')){uyari=' \u00b7 ses ayr\u0131 ak\u0131\u015fta, inmedi';break}
+    var v=tam(en,u);
+    return GX(v).then(function(x){return [x,v]});
+  }).then(function(a){
+    var m=medya(a[0],a[1]);
+    return (m.map?GX(m.map,'arraybuffer'):Promise.resolve(null)).then(function(ib){
+      return parcalar(m.P).then(function(out){if(ib)out.unshift(ib);return [out,!!m.map]});
+    });
+  }).then(function(r){
+    var b=new Blob(r[0],{type:r[1]?'video/mp4':'video/mp2t'}),h=URL.createObjectURL(b),x=document.createElement('a');
+    x.href=h;x.download=(document.title||'video').replace(/[\\\/:*?"<>|]/g,'_').substr(0,60)+(r[1]?'.mp4':'.ts');
+    document.body.appendChild(x);x.click();x.parentNode.removeChild(x);
+    setTimeout(function(){URL.revokeObjectURL(h)},60000);
+    o.bit('HLS indirildi: '+(b.size/1048576).toFixed(1)+' MB'+uyari,6);
+  }).catch(function(e){if(!o.iptal)o.bit('HLS: '+e.message,6)}).then(function(){HLS.on=false});
 }
 
 // LS: sayfadaki medya kaynaklarini listeler (acik ise kapatir)
@@ -341,7 +457,7 @@ function LS(){
     var kb=el('div','kb',ADI[tip]),dg=el('div','dg');
     function d(y,f,ip){var b=el('button','d',y);b.title=ip;b.onclick=function(x){x.stopPropagation();f()};dg.appendChild(b)}
     d('\u25B6 \u0130zle',function(){izle(u,tip)},'Listenin \u00fcst\u00fcnde \u00f6nizle');
-    d('\u2B07 \u0130ndir',function(){ID(u)},'Dosyay\u0131 indir');
+    d('\u2B07 \u0130ndir',function(){if(/\.m3u8(\?|#|$)/i.test(u))HLS(u);else if(/\.mpd(\?|#|$)/i.test(u))N('DASH ak\u0131\u015f\u0131 desteklenmiyor');else ID(u)},'Dosyay\u0131 indir');
     if(e&&e!==document.body)d('\u{1F441} G\u00f6ster',function(){goster(e)},'Sayfada nerede oldu\u011funu g\u00f6ster');
     d('\u{1F4CB} Kopyala',function(){K(u,'Adres')},'Adresi kopyala');
     if(t){
