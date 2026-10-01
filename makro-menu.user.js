@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      7.1
+// @version      7.2
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -140,7 +140,7 @@ function ID(u){
 // Arayuz Shadow DOM icinde: sayfanin CSS'i listeye karismaz.
 function LS(){
   var H=document.getElementById('__ls');
-  if(H){if(!(H.__ac&&H.__ac()))H.parentNode.removeChild(H);return}
+  if(H){if(!(H.__ac&&H.__ac())){if(H.__kapat)H.__kapat();else H.parentNode.removeChild(H)}return}
   H=document.createElement('div');H.id='__ls';
   H.style.cssText='position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647';
   var D=H.attachShadow?H.attachShadow({mode:'open'}):H;
@@ -168,7 +168,6 @@ function LS(){
     '.dg{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}'+
     '.d{padding:5px 9px;border-radius:6px;background:#2a2d35;color:#ddd;font-size:12px;cursor:pointer;border:0}.d:hover{background:#3b82f6;color:#fff}'+
     '.bos{padding:16px;color:#888}'+
-    '.p.sol{right:auto;left:0;border-left:0;border-right:1px solid #2a2d35}'+
     '.tt,.ad{display:none}'+
     '.cs{position:fixed;display:none;pointer-events:none;border:4px solid #ff0039;border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 0 18px 4px rgba(255,0,57,.6);transition:opacity .4s;animation:cs 1s ease-in-out 3}'+
     '@keyframes cs{50%{border-color:#ffd60a}}'+
@@ -199,7 +198,17 @@ function LS(){
   var P=el('div','p'),BS=el('div','bs'),UST=el('div','ust'),BL=el('div','bl','Kaynaklar'),SAY=el('small');
   BL.appendChild(SAY);
   var KP=el('button','kp','\u2715');KP.title='Kapat';
-  KP.onclick=function(){H.parentNode.removeChild(H)};
+  // PC: panel kenar cubugu gibi sayfayi sola darlatir (html margin-right)
+  var IT=null;
+  function it(ac){
+    if(ac){
+      if(!IT){IT=document.createElement('style');IT.id='__ls_it';document.documentElement.appendChild(IT)}
+      IT.textContent='html{margin-right:'+P.offsetWidth+'px!important}';
+    }else if(IT){if(IT.parentNode)IT.parentNode.removeChild(IT);IT=null}
+  }
+  function kapat(){it(false);if(H.parentNode)H.parentNode.removeChild(H)}
+  H.__kapat=kapat;
+  KP.onclick=kapat;
   var TT=el('div','tt');TT.appendChild(el('i'));BS.appendChild(TT);
   UST.appendChild(BL);UST.appendChild(KP);BS.appendChild(UST);
   var SEK=el('div','sek');BS.appendChild(SEK);
@@ -223,9 +232,10 @@ function LS(){
     var m=mq1.matches||mq2.matches;
     if(m===MOB)return;
     MOB=m;
-    if(m){P.classList.add('m');P.classList.remove('sol');ON.classList.add('f');D.appendChild(ON)}
+    if(m){P.classList.add('m');ON.classList.add('f');D.appendChild(ON)}
     else{P.classList.remove('m');ON.classList.remove('f');P.insertBefore(ON,G);if(acik){acik.classList.remove('ac');acik=null}}
     konum();
+    it(!m);
   }
   // Tutamac: surukleme en yakin duraga oturur; dokunma k>y>t>y dongusu
   var cy=0,ch=0,cb=false,cs=false;
@@ -297,16 +307,12 @@ function LS(){
   }
 
   // Panel kapanmaz. Mobil: oge panelin ustundeki alanin ortasina gelir.
-  // PC: oge panelin arkasinda kaliyorsa panel karsi kenara gecer.
+  // PC: sayfa panelin solunda kaldigi icin ek islem gerekmez.
   function goster(e){
     if(MOB){if(dur=='t')durum('y');ON.textContent='';ON.style.display='none';onU=''}
     e.scrollIntoView({block:'center'});
     var r=e.getBoundingClientRect(),alan=MOB?vh()-yuk():vh();
     window.scrollBy(0,Math.round(r.top+r.height/2-alan/2));
-    if(!MOB){
-      var x=r.left+r.width/2,w=P.offsetWidth,sol=P.classList.contains('sol');
-      if(sol?x<w:x>innerWidth-w)P.classList.toggle('sol');
-    }
     cerceve(e);
   }
 
@@ -442,7 +448,7 @@ function LS(){
       if(gz)gz.disconnect();
       document.removeEventListener('loadstart',olay,true);
       document.removeEventListener('play',olay,true);
-      mqd(mq1,0);mqd(mq2,0);
+      it(false);mqd(mq1,0);mqd(mq2,0);
       if(window.visualViewport){visualViewport.removeEventListener('resize',kz);visualViewport.removeEventListener('scroll',kz)}
       removeEventListener('resize',kz);
       return;
