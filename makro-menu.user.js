@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      8.0
+// @version      8.1
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -9,6 +9,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      *
+// @require      https://cdn.jsdelivr.net/npm/mux.js@6.3.0/dist/mux-mp4.min.js
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // @downloadURL  https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // ==/UserScript==
@@ -181,7 +182,7 @@ function ID(u){
   });
 }
 
-// HLS: m3u8 akisini tek dosya olarak indirir. Ana listede en yuksek bant
+// HLS: m3u8 akisini tek dosya olarak indirir; MPEG-TS ise mp4'e paketler. Ana listede en yuksek bant
 // genisligi secilir; parcalar 4'erli cekilip sirayla birlestirilir.
 // Sifre: yalniz AES-128 (WebCrypto). BYTERANGE: tek dosyaysa butun cekilir,
 // degilse aralik istegi. DRM ve canli yayin: hayir.
@@ -207,6 +208,18 @@ function NB(t){
     bit:function(s,sn){y.textContent=s;x.style.display='none';setTimeout(function(){if(d.parentNode)d.parentNode.removeChild(d)},(sn||4)*1000)}};
   x.onclick=function(e){e.stopPropagation();o.iptal=true;o.bit('HLS iptal edildi',2)};
   o.y(t);return o;
+}
+
+function tsMp4(P){
+  return new Promise(function(ok,no){
+    try{
+      var t=new muxjs.Transmuxer(),O=[];
+      t.on('data',function(s){if(!O.length)O.push(s.initSegment);O.push(s.data)});
+      t.on('done',function(){if(O.length)ok(O);else no(new Error('bo\u015f'))});
+      for(var i=0;i<P.length;i++)t.push(new Uint8Array(P[i]));
+      t.flush();
+    }catch(e){no(e)}
+  });
 }
 
 function HLS(u){
@@ -301,6 +314,11 @@ function HLS(u){
     return (m.map?GX(m.map,'arraybuffer',m.mbr):Promise.resolve(null)).then(function(ib){
       return parcalar(m.P).then(function(out){if(ib)out.unshift(ib);return [out,!!m.map]});
     });
+  }).then(function(r){
+    // MPEG-TS parcalari yeniden kodlamadan mp4'e paketlenir (mux.js, Apache-2.0)
+    if(r[1]||typeof muxjs=='undefined')return r;
+    o.y('HLS: mp4 olarak paketleniyor\u2026');
+    return tsMp4(r[0]).then(function(O){return [O,true]},function(){uyari+=' \u00b7 mp4 yap\u0131lamad\u0131, .ts kaydedildi';return r});
   }).then(function(r){
     var b=new Blob(r[0],{type:r[1]?'video/mp4':'video/mp2t'}),h=URL.createObjectURL(b),x=document.createElement('a');
     x.href=h;x.download=(document.title||'video').replace(/[\\\/:*?"<>|]/g,'_').substr(0,60)+(r[1]?'.mp4':'.ts');
