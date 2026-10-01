@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      7.0
+// @version      7.1
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -170,6 +170,8 @@ function LS(){
     '.bos{padding:16px;color:#888}'+
     '.p.sol{right:auto;left:0;border-left:0;border-right:1px solid #2a2d35}'+
     '.tt,.ad{display:none}'+
+    '.cs{position:fixed;display:none;pointer-events:none;border:4px solid #ff0039;border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 0 18px 4px rgba(255,0,57,.6);transition:opacity .4s;animation:cs 1s ease-in-out 3}'+
+    '@keyframes cs{50%{border-color:#ffd60a}}'+
     '.p.m{top:auto;left:0;right:0;max-width:none;height:40%;border-left:0;border-top:1px solid #2a2d35;border-radius:14px 14px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.5);font-size:14px}'+
     '.p.m.an{transition:height .2s,top .2s}'+
     '.p.m .bs{padding:12px 14px 8px}'+
@@ -279,6 +281,21 @@ function LS(){
     v.src=u;ON.appendChild(v);
     if(tip!='img'&&v.play){var pr=v.play();if(pr&&pr.catch)pr.catch(function(){})}
   }
+  // Cerceve: ogenin kendi stiline dokunmaz; ust ogenin overflow kirpmasi
+  // ve sitenin CSS'i etkilemez. 4 sn ogeyi izler, sonra soner.
+  var CS=el('div','cs'),csZ=0,csO=null;D.insertBefore(CS,P);
+  function cerceve(e){
+    csO=e;csZ=Date.now()+4000;CS.style.opacity='1';
+    (function iz(){
+      if(csO!==e)return;
+      var r=e.getBoundingClientRect();
+      CS.style.top=(r.top-6)+'px';CS.style.left=(r.left-6)+'px';CS.style.width=(r.width+12)+'px';CS.style.height=(r.height+12)+'px';
+      CS.style.display='block';
+      if(Date.now()<csZ)requestAnimationFrame(iz);
+      else{CS.style.opacity='0';setTimeout(function(){if(csO===e){CS.style.display='none';csO=null}},400)}
+    })();
+  }
+
   // Panel kapanmaz. Mobil: oge panelin ustundeki alanin ortasina gelir.
   // PC: oge panelin arkasinda kaliyorsa panel karsi kenara gecer.
   function goster(e){
@@ -290,8 +307,7 @@ function LS(){
       var x=r.left+r.width/2,w=P.offsetWidth,sol=P.classList.contains('sol');
       if(sol?x<w:x>innerWidth-w)P.classList.toggle('sol');
     }
-    var o=e.style.outline;e.style.outline='5px solid #ff0039';
-    setTimeout(function(){e.style.outline=o},3000);
+    cerceve(e);
   }
 
   // Ayni adres once Taranan'da cikip sonra video ogesinde bulunursa Video'ya tasinir
