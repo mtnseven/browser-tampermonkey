@@ -1,16 +1,64 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      7.5
+// @version      8.0
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
-// @noframes
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      *
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // @downloadURL  https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js
 // ==/UserScript==
+
+// ===== AG (her cercevede calisir) =====
+// Ana sayfa menuyu cizer. iframe icinde menu cizilmez; yalniz medya
+// toplanir ve ana sayfa sorunca iletilir. Mesajlar kuruluma ozel
+// gizli anahtarla isaretlenir; sayfa kodu sahte adres sokamaz.
+var UST=window.top===window.self;
+var TOK=GM_getValue('mm_gizli','');
+if(!TOK){TOK=Math.random().toString(36).slice(2)+Date.now().toString(36);GM_setValue('mm_gizli',TOK)}
+
+// Sayfa acildigi andan itibaren medya ag kayitlari (tampon dolsa da kacmaz)
+var MZ=[],MZG={};
+function medyaAd(n,t){return /\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd|ts|m4s)(\?|#|$)/i.test(n)||t=='video'||t=='audio'}
+try{if(performance.setResourceTimingBufferSize)performance.setResourceTimingBufferSize(3000)}catch(e){}
+try{
+  new PerformanceObserver(function(L){
+    var E=L.getEntries();
+    for(var i=0;i<E.length;i++)if(medyaAd(E[i].name,E[i].initiatorType)&&!MZG[E[i].name]){
+      MZG[E[i].name]=1;MZ.push(E[i].name);
+      if(MZ.length>2000)delete MZG[MZ.shift()];
+    }
+  }).observe({type:'resource',buffered:true});
+}catch(e){}
+
+// DQ: secici ile belge + acik Shadow DOM'lar icinde derin arama
+function DQ(sel,kok,l){
+  kok=kok||document;l=l||[];
+  var E=kok.querySelectorAll(sel),i;
+  for(i=0;i<E.length;i++)l.push(E[i]);
+  var A=kok.querySelectorAll('*');
+  for(i=0;i<A.length;i++)if(A[i].shadowRoot&&A[i].id!='__ls')DQ(sel,A[i].shadowRoot,l);
+  return l;
+}
+
+// iframe tarafi: ana sayfa 'sor' deyince video/ses ogeleri ve ag kayitlari gider
+if(!UST)window.addEventListener('message',function(ev){
+  var d=ev.data;
+  if(!d||d.mm!==TOK||d.is!=='sor'||ev.source!==window.top)return;
+  var l=[],V=DQ('video,audio'),i,j;
+  for(i=0;i<V.length;i++){
+    var t=V[i].tagName=='AUDIO'?'audio':'video',u=V[i].currentSrc||V[i].src;
+    if(u)l.push([u,t]);
+    var so=V[i].querySelectorAll('source');
+    for(j=0;j<so.length;j++)if(so[j].src)l.push([so[j].src,t]);
+  }
+  for(i=0;i<MZ.length;i++)l.push([MZ[i],'tara']);
+  if(l.length)window.top.postMessage({mm:TOK,is:'medya',l:l},'*');
+});
 
 // ===== AYARLAR =====
 var AYAR={
@@ -565,7 +613,7 @@ function LS(){
 
   function medyaMi(e){return /\.(mp4|webm|m4a|m4v|mp3|ogg|oga|wav|flac|mov|m3u8|mpd|ts|m4s)(\?|#|$)/i.test(e.name)||e.initiatorType=='video'||e.initiatorType=='audio'}
   function medya(sc){
-    var l=[],E=document.querySelectorAll(sc);
+    var l=[],E=DQ(sc);
     for(var i=0;i<E.length;i++){
       var e=E[i],u=e.currentSrc||e.src;
       if(u)l.push([u,e]);
@@ -587,7 +635,7 @@ function LS(){
   }
   function yukle(l,tip){for(var i=0;i<l.length;i++)ekle(l[i][0],tip,l[i][1])}
 
-  var res=[],T=document.querySelectorAll('*');
+  var res=[],T=DQ('*');
   for(var i=0;i<T.length;i++){
     var e=T[i];
     if(e.tagName=='IMG'){var ru=rAd(e);if(ru)res.push([ru,e])}
@@ -599,6 +647,7 @@ function LS(){
   }
   var tar=[],R=performance.getEntriesByType?performance.getEntriesByType('resource'):[];
   for(var k=0;k<R.length;k++)if(medyaMi(R[k]))tar.push([R[k].name,null]);
+  for(k=0;k<MZ.length;k++)tar.push([MZ[k],null]);
 
   yukle(medya('video'),'video');
   yukle(medya('audio'),'audio');
@@ -616,9 +665,35 @@ function LS(){
   function tekrar(){
     var l=medya('video');for(var i=0;i<l.length;i++)ekle(l[i][0],'video',l[i][1],1);
     l=medya('audio');for(i=0;i<l.length;i++)ekle(l[i][0],'audio',l[i][1]);
-    var I=document.querySelectorAll('img');
+    var I=DQ('img');
     for(i=0;i<I.length;i++)ekle(rAd(I[i]),'img',I[i]);
+    cerSor(window);
   }
+  // Cerceveler: tum ic ice iframe'lere sor; gelen medya iframe ogesine baglanir
+  function cerSor(w){
+    for(var i=0;i<w.frames.length;i++){
+      try{w.frames[i].postMessage({mm:TOK,is:'sor'},'*')}catch(x){}
+      try{cerSor(w.frames[i])}catch(x){}
+    }
+  }
+  function cerOge(src){
+    var F=DQ('iframe');
+    for(var i=0;i<F.length;i++)if(F[i].contentWindow===src)return F[i];
+    return null;
+  }
+  function mesaj(ev){
+    var d=ev.data;
+    if(!d||d.mm!==TOK||d.is!=='medya'||!d.l)return;
+    var f=cerOge(ev.source);
+    for(var i=0;i<d.l.length&&i<3000;i++){
+      var u=d.l[i][0],t=d.l[i][1];
+      if(typeof u!='string')continue;
+      if(t=='tara')taraEkle(u,1);
+      else if(t=='video'||t=='audio')ekle(u,t,f,1);
+    }
+  }
+  window.addEventListener('message',mesaj);
+  cerSor(window);
   function olay(e){var t=e.target;if(t&&(t.tagName=='VIDEO'||t.tagName=='AUDIO'))setTimeout(tekrar,300)}
   var gz=null;
   try{if(performance.setResourceTimingBufferSize)performance.setResourceTimingBufferSize(3000)}catch(e){}
@@ -638,6 +713,7 @@ function LS(){
       document.removeEventListener('loadstart',olay,true);
       document.removeEventListener('play',olay,true);
       it(false);mqd(mq1,0);mqd(mq2,0);
+      window.removeEventListener('message',mesaj);
       if(window.visualViewport){visualViewport.removeEventListener('resize',kz);visualViewport.removeEventListener('scroll',kz)}
       removeEventListener('resize',kz);
       return;
@@ -647,6 +723,8 @@ function LS(){
 }
 
 // ===== ARAYUZ =====
+// iframe icinde menu cizilmez (eski @noframes'in isi)
+if(UST){
 var B=document.createElement('div');
 B.textContent=AYAR.simge;
 B.style.cssText='position:fixed;right:'+AYAR.sag+'px;bottom:'+AYAR.alt+'px;width:'+AYAR.boy+'px;height:'+AYAR.boy+'px;line-height:'+AYAR.boy+'px;text-align:center;background:'+AYAR.zemin+';color:'+AYAR.yazi+';font:20px sans-serif;z-index:2147483647;border-radius:50%;opacity:.85';
@@ -695,3 +773,4 @@ B.onclick=function(e){
   M.style.display='block';
 };
 document.onclick=function(){M.style.display='none'};
+}
