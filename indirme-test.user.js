@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name         Indirme Test
 // @namespace    local
-// @version      1.6
-// @description  Medya Indir simge testi: sabit simge resim ve videoda; video kaynak turu testi. Gecici betik.
+// @version      1.7
+// @description  Resim ve videolarin kosesine indirme simgesi koyar; en yuksek cozunurlukte indirir.
 // @match        *://*/*
+// @exclude      *://*.instagram.com/*
 // @run-at       document-end
 // @noframes
-// @grant        GM_getValue
-// @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      *
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/indirme-test.user.js
@@ -24,15 +23,6 @@ function N(t,s){
   KT.appendChild(d);setTimeout(function(){d.remove()},(s||8)*1000)
 }
 
-function R(){
-  var b=null,m=0;
-  document.querySelectorAll('img').forEach(function(i){
-    var a=i.naturalWidth*i.naturalHeight;
-    if(a>m&&i.currentSrc&&i.currentSrc.indexOf('data:')!==0){m=a;b=i}
-  });
-  return b
-}
-
 function A(u){
   var p=(u.split('?')[0].split('/').pop()||'resim').replace(/[^\w.\-]/g,'_');
   if(!/\.(jpe?g|png|gif|webp|mp4|webm|ogv|mov)$/i.test(p))p+='.jpg';
@@ -46,7 +36,7 @@ function B(i){
     if(!v)v=i.getAttribute('data-src')||'';
     if(!v){
       var e=performance.getEntriesByType('resource').filter(function(x){return /\.(mp4|webm|ogv|mov)(\?|$)/i.test(x.name)});
-      if(e.length){v=e[e.length-1].name;N('Kaynak sayfa kayitlarindan bulundu',4)}
+      if(e.length)v=e[e.length-1].name;
     }
     return v||''
   }
@@ -61,9 +51,9 @@ function B(i){
 function V(i){
   var u=B(i);
   if(!u){N('\u00d6nce videoyu ba\u015flat, sonra simgeye tekrar bas',5);return}
-  if(u.indexOf('blob:')===0||u.indexOf('mediastream:')===0){N('Video: akis (blob:), desteklenmiyor');return}
+  if(u.indexOf('blob:')===0||u.indexOf('mediastream:')===0){N('Ak\u0131\u015f videosu desteklenmiyor');return}
   var p=A(u);if(!/\.(mp4|webm|ogv|mov)$/i.test(p))p=p.replace(/\.jpg$/,'')+'.mp4';
-  N('Video: dogrudan adres, indiriliyor',4);Y(u,p)
+  Y(u,p)
 }
 
 function Y(u,ad){
@@ -81,7 +71,7 @@ function Y(u,ad){
   })
 }
 
-var MOD=GM_getValue('mod','sabit'),ES=100,HR=new Map(),VR=[];
+var ES=100,HR=new Map(),VR=[];
 
 function O(r){
   return VR.some(function(v){
@@ -127,27 +117,10 @@ function S(i){
 }
 
 function T(){
-  HR.forEach(function(k,i){if(!i.isConnected||MOD!=='sabit'){k.remove();HR.delete(i)}});
+  HR.forEach(function(k,i){if(!i.isConnected){k.remove();HR.delete(i)}});
   VR=[];document.querySelectorAll('video').forEach(function(v){var q=v.getBoundingClientRect();if(q.width>=ES&&q.height>=ES)VR.push(q)});
-  if(MOD==='sabit')document.querySelectorAll('img,video').forEach(S)
+  document.querySelectorAll('img,video').forEach(S)
 }
-
-document.addEventListener('click',function(e){
-  if(MOD!=='dokun')return;
-  var i=e.target.closest&&e.target.closest('img');
-  if(!i)return;
-  var k=HR.get(i);
-  if(k&&k.isConnected)return;
-  k=S(i);if(!k)return;
-  e.preventDefault();e.stopPropagation();
-  setTimeout(function(){k.remove();HR.delete(i)},4000)
-},true);
-
-var b=document.createElement('div');
-b.style.cssText='position:fixed;left:14px;bottom:90px;padding:10px 14px;border-radius:22px;background:#1565c0;color:#fff;font:bold 14px sans-serif;z-index:'+Z+';box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer';
-function E(){b.textContent=MOD==='sabit'?'Mod: SABIT':'Mod: DOKUN'}
-b.onclick=function(){MOD=MOD==='sabit'?'dokun':'sabit';GM_setValue('mod',MOD);E();T();N('Mod degisti: '+MOD,3)};
-E();document.body.appendChild(b);
 
 T();setInterval(T,1500);
 addEventListener('resize',T);
