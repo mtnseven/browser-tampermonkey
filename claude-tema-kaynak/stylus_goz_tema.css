@@ -1,0 +1,335 @@
+/* ================================================================
+   RENK TANIMLARI  —  TÜM RENKLER BURADA. Değiştirmek istediğin
+   rengi bul, sadece bu satırdaki hex'i değiştir. Aşağısı otomatik güncellenir.
+   Palet: göz yorgunluğunu azaltan koyu palet (15.10.2026). Saf beyaz yok, kalın yazı yok, yazı kontrastı ~4,5-7.
+   ================================================================ */
+:root {
+    /* --- GENEL ZEMİN & METİN --- */
+    --zemin-ana:            #000000;  /* tüm sayfanın ana arka planı */
+    --zemin-koyu:           #020a12;  /* sol menü, header, yazma kutusu zemini */
+    --zemin-kutu:           #0b0d0f;  /* küçük kutular, mesaj balonu, satır içi kod zemini */
+    --metin-ana:            #4691a0;  /* varsayılan metin, senin mesajın */
+    --metin-claude:         #6d8da2;  /* Claude yanıt metni */
+    --metin-soluk:          #4e8240;  /* ikincil soluk metin (liste, tarih) */
+    --metin-placeholder:    #71747f;  /* yazma kutusu "Write a message" yer tutucu */
+    --metin-parlak:         #70a1c7;  /* hover'da ve kalın yerine öne çıkan metin (saf beyaz yok) */
+
+    /* --- ÇERÇEVE & ÇİZGİLER --- */
+    --cerceve:              #28464d;  /* tüm çerçeveler, ayraç çizgileri */
+    --kaydirma:             #2a365a;  /* kaydırma çubuğu tutma yeri */
+    --kaydirma-ustunde:     #51529a;  /* kaydırma çubuğu fare üstünde */
+
+    /* --- VURGU / YEŞİL --- */
+    --vurgu-yesil:          #6b8669;  /* seçili satır çizgisi, rozetler, gönder buton hover */
+    --link-hover:           #70a1c7;  /* metin içi link hover */
+    --hover-cizgi:          #51529a;  /* sohbet satırı hover sol çizgi */
+
+    /* --- METİN İÇİ LİNKLER --- */
+    --link:                 #6b8669;  /* sohbet metnindeki gerçek linkler */
+
+    /* --- SEÇİLİ SOHBET SATIRI --- */
+    --secili-zemin:         #152232;  /* açık sohbet satırı arka planı */
+
+    /* --- KOD BLOĞU ZEMİNLERİ --- */
+    --kod-zemin:            #080a0d;  /* kod bloğu iç/dış zemini */
+    --kod-satirici:         #8a7a6a;  /* satır içi <code> metin rengi */
+
+    /* ================================================================
+       KOD İÇİ SÖZDİZİMİ RENKLERİ  —  HER KATEGORİ BAĞIMSIZ.
+       Bunların her biri kod bloğundaki farklı bir yazı türünü boyar.
+       ================================================================ */
+    --kod-duz:              #71747f;  /* token'sız düz kod metni + notr inline token'lar */
+    --tk-string:            #8a7a6a;  /* String / etiket (örn: "file-upload") */
+    --tk-attribute:         #8a7a6a;  /* Nitelik adları (HTML/CSS attribute) */
+    --tk-selector:          #4aa02c;  /* Seçiciler & özellik adları & .class yazıları (örn: background, .foo) */
+    --tk-keyword:           #8a9f5a;  /* Anahtar kelime / işaret (örn: !important) */
+    --tk-comment:           #5a6a5a;  /* Yorum satırları (/* ... *​/) */
+    --tk-number:            #6f8f6a;  /* Sayılar ve birimler (örn: 1px, 12) */
+    --tk-punctuation:       #707070;  /* Noktalama / parantez ( { } : ; ) */
+    --tk-function:          #7a9f5a;  /* Fonksiyonlar (örn: rgb(), attr()) */
+    
+    --model-hover-bg:       #1d1128;  /* model seçici (Opus 4.8) butonu hover zemini */
+    --model-hover-metin:    #b09ad6;  /* model seçici buton hover yazı rengi */
+
+    /* --- YAZI TİPİ --- (Roboto Mono bilgisayarda kurulu değilse sistem eş aralıklısı) */
+    --f-govde:              system-ui, sans-serif;
+    --f-kod:                "Roboto Mono", ui-monospace, monospace;
+}
+
+
+
+/* ========== GENEL ========== */
+body, html {
+    background: var(--zemin-ana) !important;
+    color: var(--metin-ana) !important;
+}
+.flex.min-h-screen.w-full { background: var(--zemin-ana) !important; }
+.bg-bg-100.rounded-b-2xl { background: var(--zemin-ana); }
+.bg-bg-200 { background: var(--zemin-ana); }
+.rounded-lg:not(.absolute), .rounded-xl:not(.absolute) { background: var(--zemin-kutu) !important; }
+/* Proje paneli (Talimatlar, Bağlam, Bellek, Zamanlanmış): satırın üstüne
+   serili görünmez tıklama düğmesi saydam kalmalı, yoksa soldaki yazıyı örter. */
+button.absolute.inset-0, button.absolute.inset-0:hover { background: transparent !important; }
+.align-middle { background: var(--zemin-ana) !important; }
+
+/* ========== KENAR CUBUGU (sol menu) ========== */
+.z-sidebar .mb-1 { margin-bottom: 0 !important; }
+nav.h-screen {
+    background: var(--zemin-koyu) !important;
+    border-right: 1px solid var(--cerceve) !important;
+    box-shadow: none !important;
+}
+/* Sol menü linkleri genel yeşil 'a' kuralından muaf */
+nav a { color: var(--metin-ana) !important; }
+
+/* Sohbet listesi satirlari */
+ul.flex.flex-col.gap-px li a {
+    background: transparent !important;
+    color: var(--metin-soluk) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+}
+ul.flex.flex-col.gap-px li a:hover {
+    background: var(--zemin-kutu) !important;
+    color: var(--metin-parlak) !important;
+    border-left: 3px solid var(--hover-cizgi) !important;
+}
+ul.flex.flex-col.gap-px li a[class*="bg-bg-400"] {
+    background: var(--secili-zemin) !important;
+    color: var(--metin-parlak) !important;
+    border-left: 3px solid var(--vurgu-yesil) !important;
+}
+ul.flex.flex-col.gap-px li a[class*="bg-bg-400"] .text-sm { margin-left: 5px; }
+
+/* ========== ANA SOHBET ALANI ========== */
+.h-screen.flex.flex-col.overflow-hidden { background: var(--zemin-ana) !important; }
+header {
+    background: var(--zemin-koyu) !important;
+    border-bottom: 1px solid var(--cerceve) !important;
+    box-shadow: none !important;
+}
+.relative.h-full.flex-1.flex.overflow-x-hidden.overflow-y-scroll { background: var(--zemin-ana) !important; }
+
+/* Kullanici mesaj balonu */
+.group.relative.inline-flex.gap-2.bg-bg-300 {
+    background: var(--zemin-kutu) !important;
+    border: 1px solid var(--cerceve) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+.font-user-message {
+    color: var(--metin-ana) !important;
+    font-size: 13px !important;
+}
+
+/* Claude yanit yazisi */
+.font-claude-response,
+.font-claude-response-body {
+    color: var(--metin-claude) !important;
+    background: transparent !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+}
+/* Satır içi <code> (text-danger-000 kırmızısını ezer) */
+.font-claude-response code,
+.font-claude-response-body code {
+    color: var(--kod-satirici) !important;
+    background: var(--zemin-kutu) !important;
+}
+
+/* ========== KOD BLOKLARI: DÜZ METİN ========== */
+pre, code,
+.code-block__code,
+div[class*="code-block"],
+.language-css,
+code.language-css {
+    background: transparent !important;
+    color: var(--kod-duz) !important;
+    border: none !important;
+    border-radius: 4px !important;
+}
+
+/* ========== KOD İÇİ SÖZDİZİMİ TOKEN'LARI ==========
+   Her blok TEK bir kategoriyi boyar ve TEK bir değişkene bağlı.
+   Not: Bazı token'lar sınıf yerine inline style="color: rgb(...)" taşır;
+   o yüzden hem .token.xxx hem span[style*="rgb(...)"] birlikte hedeflenir. */
+
+/* String / etiket */
+pre .token.string, code .token.string,
+.code-block__code .token.string, div[class*="code-block"] .token.string,
+pre span[style*="rgb(244, 123, 133)"], code span[style*="rgb(244, 123, 133)"],
+.code-block__code span[style*="rgb(244, 123, 133)"], div[class*="code-block"] span[style*="rgb(244, 123, 133)"] {
+    color: var(--tk-string) !important;
+}
+/* Nitelik (attribute) */
+pre .token.attribute, code .token.attribute,
+.code-block__code .token.attribute, div[class*="code-block"] .token.attribute,
+span.token.attribute,
+pre span[style*="rgb(240, 117, 128)"], code span[style*="rgb(240, 117, 128)"],
+.code-block__code span[style*="rgb(240, 117, 128)"], div[class*="code-block"] span[style*="rgb(240, 117, 128)"] {
+    color: var(--tk-attribute) !important;
+}
+/* Seçiciler / özellik adları / .class yazıları  (TEK yerde - çakışma kaldırıldı) */
+pre .token.selector, code .token.selector,
+pre .token.property, code .token.property,
+pre .token.class, code .token.class,
+.code-block__code .token.property, div[class*="code-block"] .token.property,
+.code-block__code .token.class, div[class*="code-block"] .token.class {
+    color: var(--tk-selector) !important;
+}
+/* Anahtar kelime / işaret (!important) */
+pre .token.important, code .token.important,
+pre .token.keyword, code .token.keyword,
+pre .token.rule, .code-block__code .token.important {
+    color: var(--tk-keyword) !important;
+}
+/* Yorumlar */
+pre .token.comment, code .token.comment,
+.code-block__code .token.comment {
+    color: var(--tk-comment) !important;
+}
+/* Sayılar ve birimler */
+pre .token.number, code .token.number,
+pre .token.unit, .code-block__code .token.number {
+    color: var(--tk-number) !important;
+}
+/* Noktalama / parantez */
+pre .token.punctuation, code .token.punctuation,
+.code-block__code .token.punctuation {
+    color: var(--tk-punctuation) !important;
+}
+/* Fonksiyonlar */
+pre .token.function, code .token.function,
+.code-block__code .token.function {
+    color: var(--tk-function) !important;
+}
+/* Notr inline token'lar (rgb 129,136,152) -> düz kod rengi */
+pre span[style*="rgb(129, 136, 152)"], code span[style*="rgb(129, 136, 152)"],
+.code-block__code span[style*="rgb(129, 136, 152)"], div[class*="code-block"] span[style*="rgb(129, 136, 152)"] {
+    color: var(--kod-duz) !important;
+}
+
+/* Kod bloğu zeminleri */
+.\[\&_pre\>div\]\:bg-bg-000\/50 pre>div { background-color: var(--kod-zemin); }
+.bg-bg-000.w-full { background: var(--kod-zemin) !important; }
+
+/* Başlık fontu */
+.font-copernicus {
+    color: var(--metin-ana) !important;
+    font-size: 15px !important;
+}
+
+/* ========== GIRIS ALANI (yazma kutusu) ========== */
+.flex.flex-col.bg-bg-000.border-0\.5.border-border-300 {
+    background: var(--zemin-koyu) !important;
+    border: 1px solid var(--cerceve) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+.ProseMirror {
+    background: transparent !important;
+    color: var(--metin-ana) !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    padding: 12px !important;
+}
+.ProseMirror p.is-editor-empty:first-child:before {
+    color: var(--metin-placeholder) !important;
+    content: attr(data-placeholder) !important;
+}
+
+
+/* ========== KAYDIRMA CUBUKLARI ========== */
+::-webkit-scrollbar { width: 8px !important; background: var(--zemin-koyu) !important; }
+::-webkit-scrollbar-thumb { background: var(--kaydirma) !important; border-radius: 4px !important; }
+::-webkit-scrollbar-thumb:hover { background: var(--kaydirma-ustunde) !important; }
+* { scrollbar-width: thin; scrollbar-color: var(--kaydirma) var(--zemin-koyu); }
+::-webkit-scrollbar-track { background: var(--zemin-koyu) !important; }
+
+/* ========== DIGER ========== */
+button[class*="model-selector-dropdown"] {
+    background: transparent !important;
+    color: var(--metin-ana) !important;
+    border: 1px solid var(--cerceve) !important;
+}
+
+/* Model seçici (Opus 4.8 Medium) butonu hover */
+button[data-testid="model-selector-dropdown"]:hover {
+    background: var(--model-hover-bg) !important;
+    color: var(--model-hover-metin) !important;
+}
+
+.bg-gradient-to-b, .bg-gradient-to-t, .bg-gradient-to-r,
+.shadow-lg, .shadow-md, .shadow-sm, .drop-shadow, .backdrop-blur {
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+.bg-bg-100.w-full.h-2 { display: none; }
+
+/* Metin içi linkler (nav a bunu sidebar'da ezer) */
+a {
+    color: var(--link) !important;
+    text-decoration: none !important;
+}
+a:hover {
+    color: var(--link-hover) !important;
+    text-decoration: underline !important;
+}
+
+button {
+    background: transparent !important;
+    color: var(--metin-ana) !important;
+    border: none !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+}
+button:hover {
+    background: var(--zemin-kutu) !important;
+    color: var(--metin-parlak) !important;
+}
+
+.rounded-full, .rounded-lg, .rounded-xl, .rounded-2xl { border-radius: 4px !important; }
+
+.bg-accent-main-000, .bg-accent-secondary-100, .bg-accent-pro-100 {
+    background: var(--vurgu-yesil) !important;
+}
+.text-text-300, .text-text-400, .text-text-500 { color: var(--metin-soluk) !important; }
+.text-text-100, .text-text-000 { color: var(--metin-ana) !important; }
+
+/* Çerçeve silme - senin border-border-300 çerçevelerini korur */
+.border-0\.5 { border: none !important; }
+
+/* ========== SAG PANEL ========== */
+.bg-bg-000.flex.h-full.flex-col.relative,
+.w-full.h-full.relative,
+div[class*="bg-bg-000"] {
+    background: var(--zemin-ana);
+}
+.ease-out.duration-200.relative.flex.w-full.flex-1.overflow-x-auto.overflow-y-scroll {
+    background: var(--zemin-ana) !important;
+}
+.text-text-400.pt-5.flex-1.text-right { display: none !important; }
+
+/* ========== YAZI TİPİ VE KALINLIK ========== */
+.font-claude-response, .font-claude-response-body,
+.font-user-message, .ProseMirror { font-family: var(--f-govde) !important; }
+pre, code, .code-block__code { font-family: var(--f-kod) !important; }
+/* Kalın yazı yok: kalın ve başlıklar normal kalınlıkta, rengiyle ayrılır */
+.font-claude-response :is(strong, b, h1, h2, h3, h4, h5, th),
+.font-claude-response-body :is(strong, b, h1, h2, h3, h4, h5, th),
+.font-user-message :is(strong, b) {
+    font-weight: 400 !important;
+    color: var(--metin-parlak) !important;
+}
+
+/* ========== DOSYA YUKLEME ========== */
+.gap-2.mx-0\.5.mb-3.flex.flex-wrap,
+div[class*="file-upload"],
+div[class*="attachment"] {
+    background: transparent !important;
+    border: 1px dashed var(--cerceve) !important;
+}
