@@ -9,6 +9,7 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 | Makro Menü | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
 | Medya İndir | Sayfadaki resim ve videoların köşesine indirme simgesi koyar; resmi en yüksek çözünürlükte, videoyu doğrudan dosya adresinden indirir. Akış videoları (YouTube vb.) ve Instagram kapsam dışıdır; tembel yüklenen videoda önce oynatma gerekir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/medya-indir.user.js) |
+| Claude Tema | claude.ai için koyu göz teması ve sağdan (telefonda alttan) açılan canlı ayar paneli: her yerin rengi, yazısı, boşluğu, çizgisi ve görünürlüğü değiştirilir, temalar saklanır. Kaynak ve test `claude-tema-kaynak/` klasöründe | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/claude-tema.user.js) |
 
 ## Kurulum
 
