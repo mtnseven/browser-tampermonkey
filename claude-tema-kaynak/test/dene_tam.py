@@ -104,6 +104,8 @@ with sync_playwright() as p:
     # 6 sağ tık
     r = ev("(()=>{const r=document.querySelector('.font-copernicus').getBoundingClientRect();return [r.left+5,r.top+5]})()")
     s.mouse.click(r[0], r[1], button='right'); s.wait_for_timeout(150)
+    kontrol('duz sag tik menu acmaz', ev(f"{K}.querySelectorAll('.menu').length") == 0)
+    s.keyboard.down('Control'); s.mouse.click(r[0], r[1], button='right'); s.keyboard.up('Control'); s.wait_for_timeout(150)
     menu = ev(f"[...{K}.querySelectorAll('.menu button')].map(b=>b.textContent)")
     print('   menu:', menu)
     kontrol('sag tik menusu', any('Sohbet başlığı' in m for m in menu))

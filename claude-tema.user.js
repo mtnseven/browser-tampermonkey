@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Claude Tema
 // @namespace    metin-claude-tema
-// @version      0.5.1
+// @version      0.5.2
 // @description  claude.ai göz teması ve canlı ayar paneli
 // @match        https://claude.ai/*
 // @run-at       document-start
 // @noframes
+// @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/claude-tema.user.js
+// @downloadURL  https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/claude-tema.user.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -19,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.5.1';
+  const SURUM = '0.5.2';
   const KISAYOL = 'Ctrl+Shift+Y';
 
   /* ================================================================
@@ -1929,7 +1931,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     const sag = el('div', 'ayar' + (depo.sagTik ? ' degisti' : ''));
     const sagB = el('button', 'anahtar' + (depo.sagTik ? ' acik' : ''));
     sagB.addEventListener('click', () => { depo.sagTik = !depo.sagTik; ayarKaydet('sagTik'); icerikCiz(); });
-    sag.append(el('span', 'etiket', 'Sağ tık menüsü'), sagB, el('span', ''));
+    sag.append(el('span', 'etiket', 'Ctrl+sağ tık menüsü'), sagB, el('span', ''));
     const boy = el('div', 'ayar');
     const boyS = el('select');
     for (const p of [11, 12, 13, 14, 15]) boyS.append(new Option(p + ' px', p, false, p === depo.panelYazi));
@@ -1939,7 +1941,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     icerik.append(sag, boy);
     for (const s of [
       `${KISAYOL}: paneli aç/kapat`, 'Ctrl+Z / Ctrl+Shift+Z: geri al / yinele (panel açıkken)',
-      'Sağ tık: o yeri düzenle · Shift+sağ tık: tarayıcının menüsü',
+      'Ctrl+sağ tık: o yeri düzenle · düz sağ tık: tarayıcının menüsü',
       'Telefonda: ◐ düğmesi, uzun basma = sağ tık', `Sürüm ${SURUM}`]) icerik.append(el('div', 'bilgi', s));
   }
 
@@ -2111,13 +2113,17 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     isaretDongu = requestAnimationFrame(isaretCiz);
   }
 
-  /* ---------------- sağ tık "Düzenle" ---------------- */
+  /* ---------------- Ctrl+sağ tık "Düzenle" ---------------- */
+  // Düz sağ tık tarayıcının menüsüne kalır (dosya paneli: indir, kopyala).
+  // Dokunmatikte Ctrl yok: uzun basma menüyü açar.
   let menuEl = null;
+  let sonIsaretci = 'mouse';
   function menuKapat() { if (menuEl) { menuEl.remove(); menuEl = null; } }
   function bizdenMi(e) { return e.composedPath().includes(kok && kok.host); }
 
   function sagTik(e) {
-    if (!depo.sagTik || e.shiftKey || secimDurumu || !kok || bizdenMi(e)) return;
+    const tus = e.ctrlKey || e.metaKey || sonIsaretci === 'touch';
+    if (!depo.sagTik || !tus || e.shiftKey || secimDurumu || !kok || bizdenMi(e)) return;
     const hedef = e.target instanceof Element ? e.target : null;
     if (!hedef) return;
     e.preventDefault(); e.stopPropagation();
@@ -2140,7 +2146,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     const yeni = el('button', '', '+ Yeni yer: ' + kisaTarif(hedef));
     yeni.addEventListener('click', () => { menuKapat(); yerOlustur(hedef); });
     menuEl.append(yeni);
-    menuEl.append(el('div', 'ipucu', 'Tarayıcının kendi menüsü: Shift + sağ tık'));
+    menuEl.append(el('div', 'ipucu', 'Tarayıcının kendi menüsü: düz sağ tık'));
     isaretKat.append(menuEl);
     const r = menuEl.getBoundingClientRect();
     menuEl.style.left = Math.min(e.clientX, innerWidth - r.width - 6) + 'px';
@@ -2323,7 +2329,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     if (y || e.shiftKey) ileriAl(); else geriAl();
   }, true);
   document.addEventListener('contextmenu', sagTik, true);
-  document.addEventListener('pointerdown', e => { if (menuEl && !e.composedPath().includes(menuEl)) menuKapat(); }, true);
+  document.addEventListener('pointerdown', e => { sonIsaretci = e.pointerType; if (menuEl && !e.composedPath().includes(menuEl)) menuKapat(); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') menuKapat(); }, true);
   window.addEventListener('resize', () => { if (kap) genislikUygula(depo.genislik); });
 
