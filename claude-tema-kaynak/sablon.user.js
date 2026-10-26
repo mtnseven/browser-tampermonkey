@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Tema
 // @namespace    metin-claude-tema
-// @version      0.5.2
+// @version      0.5.3
 // @description  claude.ai göz teması ve canlı ayar paneli
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.5.2';
+  const SURUM = '0.5.3';
   const KISAYOL = 'Ctrl+Shift+Y';
 
   /* ================================================================
@@ -147,6 +147,7 @@
     yer: oku('yer', ''),
     katlama: oku('katlama', {}),
     sagTik: oku('sagTik', true),
+    dugmeKonum: oku('dugmeKonum', null),
     panelYazi: oku('panelYazi', 12),
     isaret: oku('isaret', true),
     sonRenkler: oku('sonRenkler', []),
@@ -597,10 +598,11 @@ button:disabled, input:disabled, select:disabled { opacity: .45; cursor: default
 .dugme {
   position: fixed; right: 14px; bottom: 14px; width: 34px; height: 34px;
   border-radius: 6px; border: 1px solid var(--cizgi-acik); background: var(--zemin-koyu);
-  color: var(--yazi-parlak); font-size: 16px; display: grid; place-items: center; transition: right .15s;
+  color: var(--yazi-parlak); font-size: 16px; display: grid; place-items: center; transition: left .15s, top .15s;
+  cursor: grab; touch-action: none; user-select: none;
 }
+.dugme.surukle { transition: none; cursor: grabbing; }
 .dugme:hover { border-color: var(--ustunde); background: var(--zemin-ust); }
-.acik .dugme { right: calc(var(--genislik) + 14px); }
 .panel {
   position: fixed; top: 0; right: 0; bottom: 0; width: var(--genislik);
   background: var(--zemin); border-left: 1px solid var(--cizgi);
@@ -609,7 +611,6 @@ button:disabled, input:disabled, select:disabled { opacity: .45; cursor: default
 .acik .panel { display: flex; }
 .dar .panel { top: auto; left: 0; width: auto; height: 60vh; border-left: 0; border-top: 1px solid var(--cizgi); }
 .dar .tutamak { display: none; }
-.dar.acik .dugme { right: 14px; bottom: calc(60vh + 10px); }
 .dar .sekme { padding: 8px 8px; }
 .dar .grup-bas { padding: 8px; }
 .dar .kucuk-dugme { padding: 4px 9px; }
@@ -813,7 +814,8 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
 
     const dugme = el('button', 'dugme', '◐');
     dugme.title = `Tema paneli (${KISAYOL})`;
-    dugme.addEventListener('click', () => paneliAc(!depo.acik));
+    dugme.addEventListener('click', () => { if (dugmeSuruklendi) { dugmeSuruklendi = false; return; } paneliAc(!depo.acik); });
+    dugmeK = dugme; dugmeSurukleKur(dugme);
 
     const panel = el('aside', 'panel');
     const tutamak = el('div', 'tutamak');
@@ -1481,7 +1483,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     for (const s of [
       `${KISAYOL}: paneli aç/kapat`, 'Ctrl+Z / Ctrl+Shift+Z: geri al / yinele (panel açıkken)',
       'Ctrl+sağ tık: o yeri düzenle · düz sağ tık: tarayıcının menüsü',
-      'Telefonda: ◐ düğmesi, uzun basma = sağ tık', `Sürüm ${SURUM}`]) icerik.append(el('div', 'bilgi', s));
+      '◐ düğmesi sürüklenip ekran kenarına taşınır', 'Telefonda: ◐ düğmesi, uzun basma = sağ tık', `Sürüm ${SURUM}`]) icerik.append(el('div', 'bilgi', s));
   }
 
   function benzersizAd(ad) {
@@ -1801,7 +1803,60 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     const g = Math.min(enFazla, Math.max(260, Math.round(px)));
     document.documentElement.style.setProperty('--ct-genislik', g + 'px');
     if (kap) kap.style.setProperty('--genislik', g + 'px');
+    dugmeYerlestir();
     return g;
+  }
+
+  // ◐ düğmesi sürüklenir; bırakınca en yakın ekran kenarına yapışır.
+  // Konum kenar + kenar boyunca oran olarak saklanır; panel açıkken
+  // düğme panelin üstüne binmez.
+  let dugmeK = null, dugmeSuruklendi = false;
+  function dugmeYerlestir() {
+    if (!dugmeK) return;
+    const b = 34, m = 14, k = depo.dugmeKonum || { k: 'sag', o: 1 };
+    const o = Math.min(1, Math.max(0, +k.o || 0));
+    let W = innerWidth, H = innerHeight;
+    if (depo.acik) {
+      if (darMi()) H = Math.round(innerHeight * 0.4);
+      else W = innerWidth - (parseFloat(kap.style.getPropertyValue('--genislik')) || depo.genislik);
+    }
+    let x, y;
+    if (k.k === 'sag' || k.k === 'sol') { x = k.k === 'sag' ? W - b - m : m; y = m + o * (innerHeight - b - 2 * m); }
+    else { y = k.k === 'alt' ? innerHeight - b - m : m; x = m + o * (innerWidth - b - 2 * m); }
+    dugmeK.style.left = Math.max(m, Math.min(W - b - m, x)) + 'px';
+    dugmeK.style.top = Math.max(m, Math.min(H - b - 10, y)) + 'px';
+  }
+  function dugmeSurukleKur(d) {
+    let bas = null;
+    d.addEventListener('pointerdown', e => {
+      if (e.button) return;
+      const r = d.getBoundingClientRect();
+      bas = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, oldu: false };
+      d.setPointerCapture(e.pointerId);
+    });
+    d.addEventListener('pointermove', e => {
+      if (!bas) return;
+      if (!bas.oldu && Math.abs(e.clientX - bas.x) + Math.abs(e.clientY - bas.y) < 8) return;
+      bas.oldu = true; d.classList.add('surukle');
+      d.style.left = Math.max(0, Math.min(innerWidth - 34, e.clientX - bas.dx)) + 'px';
+      d.style.top = Math.max(0, Math.min(innerHeight - 34, e.clientY - bas.dy)) + 'px';
+    });
+    const birak = () => {
+      if (!bas) return;
+      const oldu = bas.oldu; bas = null; d.classList.remove('surukle');
+      if (!oldu) return;
+      dugmeSuruklendi = true;
+      const x = parseFloat(d.style.left), y = parseFloat(d.style.top);
+      const W = innerWidth - 34, H = innerHeight - 34;
+      const u = { sol: x, sag: W - x, ust: y, alt: H - y };
+      let k = 'sag'; for (const a in u) if (u[a] < u[k]) k = a;
+      const yatay = k === 'sag' || k === 'sol';
+      depo.dugmeKonum = { k, o: yatay ? (y - 14) / Math.max(1, H - 28) : (x - 14) / Math.max(1, W - 28) };
+      ayarKaydet('dugmeKonum');
+      dugmeYerlestir();
+    };
+    d.addEventListener('pointerup', birak);
+    d.addEventListener('pointercancel', birak);
   }
 
   function tutamakKur(t) {
@@ -1828,6 +1883,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
   function darUygula() {
     document.documentElement.classList.toggle('ct-dar', darMi());
     if (kap) kap.classList.toggle('dar', darMi());
+    dugmeYerlestir();
   }
 
   function paneliAc(acik, ilk) {
@@ -1837,6 +1893,7 @@ input[type=range] { flex: 1; min-width: 40px; accent-color: var(--secili); heigh
     if (acik && kok && !ilk) { yerSecDoldur(); icerikCiz(); }
     if (kok) isaretle(acik ? depo.yer : null);
     if (!acik) menuKapat();
+    dugmeYerlestir();
   }
 
   /* ================================================================

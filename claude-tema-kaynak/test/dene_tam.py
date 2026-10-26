@@ -167,6 +167,14 @@ with sync_playwright() as p:
     s.screenshot(path=f'{OUT}/t_bozuk_yer.png')
     print('SAYFA HATALARI:', hatalar)
     print('DIYALOGLAR:', istemler)
+    # 11b ◐ sürükleme: en yakın kenara yapışır, paneli açıp kapatmaz, yenilemede kalır
+    acik0 = ev("document.documentElement.classList.contains('ct-acik')")
+    r = ev(f"(()=>{{const r={K}.querySelector('.dugme').getBoundingClientRect();return [r.left+17,r.top+17]}})()")
+    s.mouse.move(r[0], r[1]); s.mouse.down(); s.mouse.move(30, 250, steps=8); s.mouse.up(); s.wait_for_timeout(250)
+    kontrol('dugme surukle sol kenar', (ev("__depo.dugmeKonum") or {}).get('k') == 'sol')
+    kontrol('surukleme paneli degistirmedi', ev("document.documentElement.classList.contains('ct-acik')") == acik0)
+    s.reload(); s.wait_for_timeout(400)
+    kontrol('dugme yenilemede solda', ev(f"{K}.querySelector('.dugme').getBoundingClientRect().left") < 20)
     # 12 telefon
     c2 = b.new_context(viewport={'width': 400, 'height': 820}, is_mobile=True, has_touch=True)
     t = c2.new_page(); th = []
