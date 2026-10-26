@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Makro Menü
 // @namespace    local
-// @version      8.1
+// @version      8.2
 // @description  Yüzen iki katmanlı makro menü: kategori seç, maddeyi çalıştır
 // @match        *://*/*
 // @run-at       document-end
@@ -745,13 +745,68 @@ function LS(){
 if(UST){
 var B=document.createElement('div');
 B.textContent=AYAR.simge;
-B.style.cssText='position:fixed;right:'+AYAR.sag+'px;bottom:'+AYAR.alt+'px;width:'+AYAR.boy+'px;height:'+AYAR.boy+'px;line-height:'+AYAR.boy+'px;text-align:center;background:'+AYAR.zemin+';color:'+AYAR.yazi+';font:20px sans-serif;z-index:2147483647;border-radius:50%;opacity:.85';
+B.style.cssText='position:fixed;width:'+AYAR.boy+'px;height:'+AYAR.boy+'px;line-height:'+AYAR.boy+'px;text-align:center;background:'+AYAR.zemin+';color:'+AYAR.yazi+';font:20px sans-serif;z-index:2147483647;border-radius:50%;opacity:.85;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none';
 
 var M=document.createElement('div');
-M.style.cssText='position:fixed;right:'+AYAR.sag+'px;bottom:'+(AYAR.alt+AYAR.boy+6)+'px;background:'+AYAR.zemin+';color:'+AYAR.yazi+';font:14px sans-serif;z-index:2147483647;border-radius:8px;display:none;min-width:180px';
+M.style.cssText='position:fixed;background:'+AYAR.zemin+';color:'+AYAR.yazi+';font:14px sans-serif;z-index:2147483647;border-radius:8px;display:none;min-width:180px;overflow-y:auto';
 
 document.body.appendChild(B);
 document.body.appendChild(M);
+
+// Dugme konumu: kenar (sag, sol, ust, alt) + kenar boyunca oran (0-1).
+// Surukle birak; birakinca en yakin kenara yapisir. Konum butun sitelerde
+// ortaktir (GM deposu), yeniden acilista ayni yerde baslar.
+var KONUM=GM_getValue('mm_konum',null);
+function KON(){
+  var W=innerWidth-AYAR.boy, H=innerHeight-AYAR.boy, m=AYAR.sag, x, y;
+  var k=KONUM||{k:'sag',o:(H-AYAR.alt)/H};
+  var o=Math.min(1,Math.max(0,k.o));
+  if(k.k=='sag'||k.k=='sol'){x=k.k=='sag'?W-m:m;y=o*H}
+  else{y=k.k=='alt'?H-m:m;x=o*W}
+  B.style.left=Math.min(W-m,Math.max(m,x))+'px';
+  B.style.top=Math.min(H-m,Math.max(m,y))+'px';
+}
+// Menu dugmenin bulundugu yarim ekrana gore yana ve uste/alta acilir
+function YER(){
+  var r=B.getBoundingClientRect(), W=innerWidth, H=innerHeight;
+  M.style.left=M.style.right=M.style.top=M.style.bottom='';
+  if(r.left+r.width/2>W/2)M.style.right=Math.max(4,W-r.right)+'px';else M.style.left=Math.max(4,r.left)+'px';
+  if(r.top+r.height/2>H/2){M.style.bottom=(H-r.top+6)+'px';M.style.maxHeight=(r.top-12)+'px'}
+  else{M.style.top=(r.bottom+6)+'px';M.style.maxHeight=(H-r.bottom-12)+'px'}
+}
+KON();
+addEventListener('resize',function(){KON();if(M.style.display=='block')YER()});
+
+var SB=null, SURUKLENDI=false;
+B.addEventListener('pointerdown',function(e){
+  if(e.button)return;
+  var r=B.getBoundingClientRect();
+  SB={x:e.clientX,y:e.clientY,dx:e.clientX-r.left,dy:e.clientY-r.top,c:false};
+  try{B.setPointerCapture(e.pointerId)}catch(x){}
+});
+B.addEventListener('pointermove',function(e){
+  if(!SB)return;
+  if(!SB.c&&Math.abs(e.clientX-SB.x)+Math.abs(e.clientY-SB.y)<8)return;
+  SB.c=true;
+  M.style.display='none';
+  B.style.cursor='grabbing';
+  B.style.left=Math.min(innerWidth-AYAR.boy,Math.max(0,e.clientX-SB.dx))+'px';
+  B.style.top=Math.min(innerHeight-AYAR.boy,Math.max(0,e.clientY-SB.dy))+'px';
+});
+function BIRAK(){
+  if(!SB)return;
+  var c=SB.c; SB=null; B.style.cursor='grab';
+  if(!c)return;
+  SURUKLENDI=true;
+  var x=parseFloat(B.style.left), y=parseFloat(B.style.top), W=innerWidth-AYAR.boy, H=innerHeight-AYAR.boy;
+  var u={sol:x,sag:W-x,ust:y,alt:H-y}, k='sag';
+  for(var a in u)if(u[a]<u[k])k=a;
+  KONUM={k:k,o:(k=='sag'||k=='sol')?y/Math.max(1,H):x/Math.max(1,W)};
+  GM_setValue('mm_konum',KONUM);
+  KON();
+}
+B.addEventListener('pointerup',BIRAK);
+B.addEventListener('pointercancel',BIRAK);
 
 // Tek satir: yazi ve tiklaninca ne olacagi
 function S(y,f,ek){
@@ -786,9 +841,11 @@ function CIZ(k){
 
 B.onclick=function(e){
   e.stopPropagation();
+  if(SURUKLENDI){SURUKLENDI=false;return}
   if(M.style.display=='block'){M.style.display='none';return}
   CIZ();
   M.style.display='block';
+  YER();
 };
 document.onclick=function(){M.style.display='none'};
 }
