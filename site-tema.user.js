@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.0.0
+// @version      2.0.1
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai)
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.0.0';
+  const SURUM = '2.0.1';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -584,14 +584,14 @@ div[class*="attachment"] {
       { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: 'ul.flex.flex-col.gap-px li a' },
       { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: 'header' },
       { id: 'baslik', bolge: 'ust', ad: 'Sohbet başlığı', secici: '.font-copernicus' },
-      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '.font-user-message' },
-      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.group.relative.inline-flex.gap-2.bg-bg-300' },
-      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '.font-claude-response, .font-claude-response-body' },
+      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '.font-user-message, [data-testid="user-message"]' },
+      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.group.relative.inline-flex.gap-2.bg-bg-300, div:has(> [data-testid="user-message"])' },
+      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '.font-claude-response, .font-claude-response-body, .font-claude-message' },
       { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: '.font-claude-response code, .font-claude-response-body code' },
       { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: 'pre, .code-block__code' },
       { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: 'div[class*="attachment"], div[class*="file-upload"]' },
       { id: 'yazma', bolge: 'yazma', ad: 'Yazma alanı', secici: '.ProseMirror' },
-      { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"]' },
+      { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"], button[data-testid*="model-selector"]' },
       { id: 'pencere', bolge: 'acilir', ad: 'Açılır pencere', secici: '[role="dialog"]' },
       { id: 'menu', bolge: 'acilir', ad: 'Açılır menü', secici: '[role="menu"]' },
     ],
@@ -673,7 +673,7 @@ div[class*="attachment"] {
     genislik: oku('panelGenislik', 380),
     panelTema: oku('panelTema', 'Gece'),
     panelOzel: oku('panelOzel', {}),
-    panelYazi: oku('panelYazi', 12),
+    panelYazi: oku('panelYazi', 11),
     sagTik: oku('sagTik', true),
     isaret: oku('isaret', true),
     dugmeKonum: oku('dugmeKonum', null),
@@ -837,17 +837,20 @@ div[class*="attachment"] {
     const f = fontBilgi(ad);
     return `"${String(ad).replace(/"/g, '')}", ${YEDEK_AILE[(f && f.tur) || 'sans']}`;
   }
-  function bildirimler(o) {
+  // Alt öğeye de inen yazı özellikleri (alt öğe kendi rengini/yazı tipini taşıyor olabilir)
+  const ALTA_INER = new Set(['yazi', 'aile', 'harf', 'satir', 'kalinlik', 'bicem', 'boyut']);
+  function bildirimler(o, alt) {
     const d = [];
     for (const [k, v] of Object.entries(o)) {
       const oz = OZ[k];
       if (!oz || v === null || v === undefined || v === '') continue;
+      if (alt && !ALTA_INER.has(k)) continue;
       if (oz.tur === 'font') d.push(`font-family: ${aileYigini(v)} !important`);
       else if (oz.tur === 'sayi') d.push(`${oz.css}: ${v}${oz.birim} !important`);
       else if (oz.tur === 'anahtar') { if (v) d.push('display: none !important'); }
       else d.push(`${oz.css}: ${v} !important`);
     }
-    if (o.cizgi != null && !o.cizgiTur) d.push('border-style: solid !important');
+    if (!alt && o.cizgi != null && !o.cizgiTur) d.push('border-style: solid !important');
     return d;
   }
   const YERLESIM_CSS = `
@@ -873,6 +876,8 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
       const d = bildirimler(o);
       // :root öneki, temanın eşit güçteki kurallarını yener
       if (d.length) css += `:root :is(${n.secici}) { ${d.join('; ')}; }\n`;
+      const a = bildirimler(o, true);
+      if (a.length) css += `:root :is(${n.secici}) :not(h1, h2, h3, h4, svg, svg *) { ${a.join('; ')}; }\n`;
     }
     return css;
   }
@@ -1180,13 +1185,14 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
 .acilir .bilgi { color: var(--p-yazi2); padding: 2px 8px; white-space: normal; }
 .acilir input[type=search], .acilir input[type=text] { flex: 1; min-width: 0; }
 .acilir .ornek { margin-right: 6px; vertical-align: -1px; }
-.secim { flex: none; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--p-cizgi);
-  background: var(--p-cubuk); max-height: 88px; overflow-y: auto; }
+.secim { flex: none; display: flex; flex-wrap: wrap; gap: 3px; align-items: center; padding: 3px 8px 5px; border-top: 1px solid var(--p-cizgi);
+  background: var(--p-cubuk); max-height: 64px; overflow-y: auto; font-size: .86em; }
+.secim button { padding: 1px 6px; }
 .secim .say { color: var(--p-yazi3); margin-right: 2px; }
-.etk { display: inline-flex; align-items: center; gap: 4px; background: var(--p-secili); color: var(--p-yazi); border: 0; border-radius: 10px; padding: 1px 3px 1px 8px; max-width: 100%; }
+.etk { display: inline-flex; align-items: center; gap: 3px; background: var(--p-secili); color: var(--p-yazi); border: 0; border-radius: 9px; padding: 0 2px 0 6px; max-width: 100%; line-height: 16px; }
 .etk.ana { box-shadow: inset 0 0 0 1px var(--p-vurgu); }
 .etk span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.etk .x { flex: none; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(0,0,0,.22); border: 0; padding: 0; font-size: 10px; color: inherit; }
+.etk .x { flex: none; width: 14px; height: 14px; border-radius: 50%; display: inline-grid; place-items: center; background: rgba(0,0,0,.22); border: 0; padding: 0; font-size: 10px; color: inherit; }
 .coklu { margin-left: auto; }
 .coklu.acik { background: var(--p-vurgu); color: var(--p-vurgu-yazi); border-color: var(--p-vurgu); }
 .ayar { flex: 1; overflow-y: auto; padding: 2px 10px 12px; min-height: 0; }
@@ -1345,7 +1351,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       dosyaGirdi.value = '';
     });
 
-    panelEl.append(tutamak, cubuk, acilirEl, secimEl, ayarEl, listeler, dosyaGirdi);
+    panelEl.append(tutamak, cubuk, acilirEl, ayarEl, listeler, secimEl, dosyaGirdi);
     isaretKat = el('div', 'isaret-kat');
     kap.append(isaretKat, panelEl, dugme);
     kok.append(kap);
@@ -1385,6 +1391,11 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   }
 
   /* ---------------- seçim (0020) ---------------- */
+  function secimTemizle() {
+    durum.secim = []; isaretGecici = null; sonSag = null;
+    if (secimModuAcik) secimModu(false);
+    secimDegisti();
+  }
   function secimDegisti() {
     secimKaydet(); secimCiz(); listeleriCiz(); ayarCiz(); isaretCiz();
   }
@@ -1416,7 +1427,9 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     });
     cokluB = dug('Çoklu', 'Açıkken her dokunuş nesneyi seçime ekler veya çıkarır (telefon); bilgisayarda Ctrl+tık da olur',
       () => { durum.coklu = !durum.coklu; secimCiz(); }, 'coklu' + (durum.coklu ? ' acik' : ''));
-    ogeler.push(cokluB);
+    const temizle = dug('Temizle', 'Seçimi boşalt (Ctrl+Alt)', secimTemizle);
+    temizle.disabled = !sec.length;
+    ogeler.push(cokluB, temizle);
     secimEl.replaceChildren(...ogeler);
   }
 
@@ -1729,7 +1742,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     bas('PANEL');
     const boy = el('div', 'sira');
     boy.append(el('span', '', 'Yazı boyu'));
-    for (const p of [11, 12, 13, 14, 15]) boy.append(dug(p + '', '', () => { depo.panelYazi = p; yaz('panelYazi', p); panelRenkUygula(); menuCiz(); }, p === depo.panelYazi ? 'anahtar s' : 'anahtar'));
+    for (const p of [9, 10, 11, 12, 13, 14, 15]) boy.append(dug(p + '', '', () => { depo.panelYazi = p; yaz('panelYazi', p); panelRenkUygula(); menuCiz(); }, p === depo.panelYazi ? 'anahtar s' : 'anahtar'));
     o.push(boy);
     oge(`Ctrl+sağ tık ile seçme: ${depo.sagTik ? 'açık' : 'kapalı'}`, () => { depo.sagTik = !depo.sagTik; yaz('sagTik', depo.sagTik); menuCiz(); });
     oge(`Seçili nesneyi sayfada işaretle: ${depo.isaret ? 'açık' : 'kapalı'}`, () => { depo.isaret = !depo.isaret; yaz('isaret', depo.isaret); isaretCiz(); menuCiz(); });
@@ -1991,14 +2004,23 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     }
     return 'sayfa';
   }
-  function adOner(e) {
-    const a = e.getAttribute('aria-label') || e.getAttribute('data-testid') || (e.children.length < 3 ? (e.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 24) : '');
-    return a || (e.tagName.toLowerCase() + ([...e.classList][0] ? '.' + [...e.classList][0] : '')).slice(0, 30);
+  function htmlTarif(e) {
+    const et = e.tagName.toLowerCase();
+    const tid = e.getAttribute('data-testid'), rol = e.getAttribute('role');
+    const sin = [...e.classList].filter(c => !uretilmis(c) && !/[:[\]/!@%]/.test(c))[0];
+    return et + (tid ? `[${tid}]` : rol ? `[${rol}]` : sin ? '.' + sin : '');
   }
+  function adOner(e) {
+    const a = e.getAttribute('aria-label') || e.getAttribute('data-testid');
+    if (a) return a.slice(0, 30);
+    const ata = e.parentElement && e.parentElement !== document.body ? htmlTarif(e.parentElement) + ' › ' : '';
+    return (ata + htmlTarif(e)).slice(0, 48);
+  }
+
   function nesneEkle(e) {
     const bolge = bolgeBul(e);
     const bad = (BOLGELER.find(b => b.id === bolge) || {}).ad;
-    const ad = prompt(`Yeni nesnenin adı (${bad} bölgesine eklenir):`, adOner(e));
+    const ad = prompt(`Yeni nesne · ${bad} bölgesine eklenir\nHTML: ${seciciUret(e).slice(0, 90)}\nAdı:`, adOner(e));
     if (!ad || !ad.trim()) return null;
     const n = { id: 'o' + Date.now().toString(36), ad: ad.trim(), secici: seciciUret(e), bolge, tur: 'oge' };
     depo.kul.ozelNesneler.push(n);
@@ -2229,6 +2251,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       return;
     }
     if (e.key === 'Escape') { if (secimModuAcik) secimModu(false); if (durum.acilir) acilirKapat(); }
+    ctrlAltHazir = (e.key === 'Control' || e.key === 'Alt') && e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey;
     if (!depo.acik || !(e.ctrlKey || e.metaKey) || e.altKey) return;
     const z = e.code === 'KeyZ', y = e.code === 'KeyY' && !e.shiftKey;
     if (!z && !y) return;
@@ -2237,6 +2260,14 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (bizdenMi(e) ? yaziAlaniMi(ic) && ic.type !== 'range' : yaziAlaniMi(document.activeElement)) return;
     e.preventDefault(); e.stopPropagation();
     if (y || e.shiftKey) ileriAl(); else geriAl();
+  }, true);
+  // Ctrl+Alt bırakılınca seçim boşalır; arada başka tuş (AltGr ile @ gibi) basılırsa olmaz
+  let ctrlAltHazir = false;
+  window.addEventListener('keyup', e => {
+    if (ctrlAltHazir && (e.key === 'Control' || e.key === 'Alt')) {
+      ctrlAltHazir = false;
+      if (durum.secim.length || secimModuAcik) { secimTemizle(); bildir('Seçim boşaltıldı'); }
+    }
   }, true);
   document.addEventListener('contextmenu', sagTik, true);
   document.addEventListener('click', secimTik, true);

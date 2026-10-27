@@ -44,7 +44,8 @@ with sync_playwright() as p:
         s = c.new_page()
         hatalar, diyalog = [], {'cevap': ''}
         s.on('pageerror', lambda e: hatalar.append(str(e)))
-        s.on('dialog', lambda d: d.accept(diyalog['cevap']) if d.type == 'prompt' else d.accept())
+        oneriler = []
+        s.on('dialog', lambda d: (oneriler.append(d.default_value), d.accept(diyalog['cevap']) if d.type == 'prompt' else d.accept()))
         s.add_init_script(SHIM + betik)
         s.goto(KOK + sayfa_adi); s.wait_for_timeout(400)
         t = ('csp ' if 'csp' in sayfa_adi else 'duz ')
@@ -66,6 +67,7 @@ with sync_playwright() as p:
         s.evaluate(f"""(() => {{ const r=[...{K}.querySelectorAll('.satir')].find(x=>x.querySelector('.e').textContent.startsWith('Boyut'));
           const n=r.querySelector('input[type=number]'); n.value='19'; n.dispatchEvent(new Event('change')); }})()"""); s.wait_for_timeout(120)
         kontrol(t + 'boyut ikisine birden', css(s, '.font-claude-response', 'fontSize') == '19px' and css(s, '.bg-bg-300', 'fontSize') == '19px')
+        kontrol(t + 'boyut alt ogeye indi', css(s, '.font-claude-response p', 'fontSize') == '19px')
         s.evaluate(f"{K}.querySelectorAll('.secim .etk .x')[1].click()"); s.wait_for_timeout(60)
         kontrol(t + 'etiket x secimden cikardi', secim(s) == ['balon'])
         # Ctrl+sağ tık: bilinen nesne, sonra dıştaki, düz sağ tık dokunmaz
@@ -81,6 +83,7 @@ with sync_playwright() as p:
         r = s.evaluate("(()=>{const r=document.querySelector('.sabit').getBoundingClientRect();return [r.left+5,r.top+5]})()")
         s.keyboard.down('Control'); s.mouse.click(r[0], r[1], button='right'); s.keyboard.up('Control'); s.wait_for_timeout(500)
         yeni = s.evaluate("(__depo['claude.ai:kullanici'] || {}).ozelNesneler || []")
+        kontrol(t + 'ad onerisi sayfa yazisi degil', oneriler and 'sabit öğe' not in oneriler[-1] and 'div' in oneriler[-1])
         kontrol(t + 'yeni nesne eklendi ve secildi', len(yeni) == 1 and yeni[0]['ad'] == 'Sabit kutu' and secim(s) == [yeni[0]['id']])
         s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#405060'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         kontrol(t + 'yeni nesne canli boyandi', css(s, '.sabit', 'backgroundColor') == 'rgb(64, 80, 96)')
@@ -139,6 +142,17 @@ with sync_playwright() as p:
           dt.items.add(new File([{json.dumps(json.dumps(v1))}], 'eski.json', {{type:'application/json'}})); i.files = dt.files; i.dispatchEvent(new Event('change')); }})()""")
         s.wait_for_timeout(300)
         kontrol(t + 'v1 dosyasi yuklendi', css(s, '.bg-bg-300', 'backgroundColor') == 'rgb(85, 102, 119)' and css(s, 'body', 'backgroundColor') == 'rgb(18, 18, 18)' and css(s, '.bg-bg-300', 'fontSize') == '17px')
+        # Temizle düğmesi ve Ctrl+Alt (panel açık)
+        bolge_tikla(s, 'Sohbet'); nesne_tikla(s, 'Kod bloğu'); nesne_tikla(s, 'Claude yanıtı', ctrl=True)
+        kontrol(t + 'secim balonu listelerin altinda', s.evaluate(f"(() => {{ const a={K}.querySelector('.secim').getBoundingClientRect(), b={K}.querySelector('.listeler').getBoundingClientRect(); return b.height > 0 && a.top >= b.bottom - 1 && a.bottom <= innerHeight; }})()"))
+        s.evaluate(f"[...{K}.querySelectorAll('.secim button')].find(b=>b.textContent==='Temizle').click()"); s.wait_for_timeout(80)
+        kontrol(t + 'temizle dugmesi', secim(s) == [])
+        nesne_tikla(s, 'Kod bloğu')
+        s.keyboard.down('Control'); s.keyboard.down('Alt'); s.keyboard.up('Alt'); s.keyboard.up('Control'); s.wait_for_timeout(100)
+        kontrol(t + 'ctrl+alt secimi bosaltti', secim(s) == [] and s.evaluate(f"{K}.querySelectorAll('.kutu-isaret').length") == 0)
+        nesne_tikla(s, 'Kod bloğu')
+        s.keyboard.down('Control'); s.keyboard.down('Alt'); s.keyboard.press('q'); s.keyboard.up('Alt'); s.keyboard.up('Control'); s.wait_for_timeout(100)
+        kontrol(t + 'ctrl+alt+tus secimi korur', secim(s) == ['kodblok'])
         # ◐ sürükleme
         # panel kapanınca düğme 0,15 sn kayar; konumu oturduktan sonra okunur
         s.keyboard.press('Control+Shift+Y'); s.wait_for_timeout(400)
