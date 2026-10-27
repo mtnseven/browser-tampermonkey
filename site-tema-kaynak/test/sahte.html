@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>
+/* claude.ai'nin kabaca kendi görünümü (Orijinal tema testi için) */
+body{margin:0;font-family:system-ui;background:#f5f4ef;color:#29261b}
+.flex{display:flex}.flex-col{flex-direction:column}.min-h-screen{min-height:100vh}.w-full{width:100%}
+nav.h-screen{width:240px;height:100vh;background:#efeee8;border-right:1px solid #ddd;padding:10px;box-sizing:border-box;flex:none}
+ul{list-style:none;padding:0;margin:0}li a{display:block;color:#29261b;text-decoration:none}
+.ana{flex:1;display:flex;flex-direction:column;height:100vh;min-width:0}
+header{padding:10px 16px;background:#f5f4ef;border-bottom:1px solid #ddd}
+.mesajlar{flex:1;overflow-y:auto;padding:20px 40px}
+.bg-bg-300{background:#e8e6dc;padding:8px 12px;border-radius:16px;display:inline-flex}
+pre{background:#fff;padding:10px;border-radius:8px}
+.giris{margin:12px 40px;background:#fff;border:1px solid #ccc;border-radius:16px}
+.sabit{position:fixed;right:20px;top:60px;background:#c96442;color:#fff;padding:6px 10px;border-radius:8px}
+</style></head><body>
+<div class="flex min-h-screen w-full">
+ <nav class="h-screen"><div>Claude</div><ul class="flex flex-col gap-px">
+  <li><a href="#">Tema paneli kararları</a></li><li><a href="#" class="bg-bg-400">VPS haritası renkleri</a></li><li><a href="#">Tampermonkey geçiş</a></li></ul></nav>
+ <div class="ana h-screen flex flex-col overflow-hidden">
+  <header><span class="font-copernicus">Claude Tema Testi</span> <button data-testid="model-selector-dropdown" class="model-selector-dropdown">Opus 5.5</button></header>
+  <div class="mesajlar relative h-full flex-1 flex overflow-x-hidden overflow-y-scroll" style="display:block">
+   <div class="group relative inline-flex gap-2 bg-bg-300"><span class="font-user-message">Renkleri değiştirebilir miyim?</span></div>
+   <div class="font-claude-response"><p>Evet. Paneli <strong>Ctrl+Shift+Y</strong> ile aç; <a href="#">bağlantı</a> ve <code>satır içi kod</code>.</p>
+   <pre><code class="language-css"><span class="token selector">.panel</span> <span class="token punctuation">{</span> <span class="token property">width</span><span class="token punctuation">:</span> <span class="token number">360px</span><span class="token punctuation">;</span> <span class="token comment">/* yan çubuk */</span> <span class="token punctuation">}</span></code></pre>
+   <p>Uzun metin satırı: sayfa daralınca bu satır da kırılmalı, sağ kenardaki panelin altına girmemeli. Lorem ipsum dolor sit amet consectetur.</p></div>
+  </div>
+  <div class="giris flex flex-col bg-bg-000 border-0.5 border-border-300"><div class="ProseMirror"><p class="is-editor-empty" data-placeholder="Write a message">&nbsp;</p></div></div>
+ </div>
+</div>
+<div class="sabit">sabit öğe</div>
+</body></html>

@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- CSP'li sahte sayfa: satır içi <style> yasak; Site Tema yine canlı çalışmalı --><html><head><meta http-equiv="Content-Security-Policy" content="style-src 'self'"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<link rel="stylesheet" href="sahte.css"></head><body>
+<div class="flex min-h-screen w-full">
+ <nav class="h-screen"><div>Claude</div><ul class="flex flex-col gap-px">
+  <li><a href="#">Tema paneli kararları</a></li><li><a href="#" class="bg-bg-400">VPS haritası renkleri</a></li><li><a href="#">Tampermonkey geçiş</a></li></ul></nav>
+ <div class="ana h-screen flex flex-col overflow-hidden">
+  <header><span class="font-copernicus">Claude Tema Testi</span> <button data-testid="model-selector-dropdown" class="model-selector-dropdown">Opus 5.5</button></header>
+  <div class="mesajlar relative h-full flex-1 flex overflow-x-hidden overflow-y-scroll" style="display:block">
+   <div class="group relative inline-flex gap-2 bg-bg-300"><span class="font-user-message">Renkleri değiştirebilir miyim?</span></div>
+   <div class="font-claude-response"><p>Evet. Paneli <strong>Ctrl+Shift+Y</strong> ile aç; <a href="#">bağlantı</a> ve <code>satır içi kod</code>.</p>
+   <pre><code class="language-css"><span class="token selector">.panel</span> <span class="token punctuation">{</span> <span class="token property">width</span><span class="token punctuation">:</span> <span class="token number">360px</span><span class="token punctuation">;</span> <span class="token comment">/* yan çubuk */</span> <span class="token punctuation">}</span></code></pre>
+   <p>Uzun metin satırı: sayfa daralınca bu satır da kırılmalı, sağ kenardaki panelin altına girmemeli. Lorem ipsum dolor sit amet consectetur.</p></div>
+  </div>
+  <div class="giris flex flex-col bg-bg-000 border-0.5 border-border-300"><div class="ProseMirror"><p class="is-editor-empty" data-placeholder="Write a message">&nbsp;</p></div></div>
+ </div>
+</div>
+<div class="sabit">sabit öğe</div>
+</body></html>

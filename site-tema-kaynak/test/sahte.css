@@ -1,0 +1,12 @@
+/* claude.ai'nin kabaca kendi görünümü (Orijinal tema testi için) */
+body{margin:0;font-family:system-ui;background:#f5f4ef;color:#29261b}
+.flex{display:flex}.flex-col{flex-direction:column}.min-h-screen{min-height:100vh}.w-full{width:100%}
+nav.h-screen{width:240px;height:100vh;background:#efeee8;border-right:1px solid #ddd;padding:10px;box-sizing:border-box;flex:none}
+ul{list-style:none;padding:0;margin:0}li a{display:block;color:#29261b;text-decoration:none}
+.ana{flex:1;display:flex;flex-direction:column;height:100vh;min-width:0}
+header{padding:10px 16px;background:#f5f4ef;border-bottom:1px solid #ddd}
+.mesajlar{flex:1;overflow-y:auto;padding:20px 40px}
+.bg-bg-300{background:#e8e6dc;padding:8px 12px;border-radius:16px;display:inline-flex}
+pre{background:#fff;padding:10px;border-radius:8px}
+.giris{margin:12px 40px;background:#fff;border:1px solid #ccc;border-radius:16px}
+.sabit{position:fixed;right:20px;top:60px;background:#c96442;color:#fff;padding:6px 10px;border-radius:8px}
