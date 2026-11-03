@@ -6,7 +6,8 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 
 | Betik | Sürüm | Ne yapar | Kurulum |
 |---|---|---|---|
-| Site Tema | 2.0.0 | Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai). Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
+| Site Tema | 2.0.2 | Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai). Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
+| Proje Ağacı | 0.1.1 | claude.ai/code sohbet listesini başlıktaki proje emojisine göre klasörlere ayırır; klasör içinde en yeni üstte, emojisiz sohbetler Projesiz'de. Yalnız bilgisayar | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/proje-agaci.user.js) |
 | Makro Menü | 8.2 | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir. Dişli düğme sürüklenir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | 3.4 | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
 | Medya İndir | 1.8 | Sayfadaki resim ve videoların köşesine indirme simgesi koyar; resmi en yüksek çözünürlükte, videoyu doğrudan dosya adresinden indirir. Akış videoları (YouTube vb.) ve Instagram kapsam dışıdır; tembel yüklenen videoda önce oynatma gerekir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/medya-indir.user.js) |
