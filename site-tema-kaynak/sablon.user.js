@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.0.1
+// @version      2.0.2
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai)
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.0.1';
+  const SURUM = '2.0.2';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -1625,8 +1625,10 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     }
   }
   function sagTik(e) {
-    const dokunma = sonIsaretci === 'touch';
-    if (!depo.sagTik || !(e.ctrlKey || e.metaKey || dokunma) || e.shiftKey || secimModuAcik || !kok || bizdenMi(e)) return;
+    // Dokunmatikte uzun basma da contextmenu üretir; seçim yapılmaz,
+    // sayfanın kendi uzun basma işlevi kalır. Telefonda seçim "+" düğmesiyle.
+    if (sonIsaretci === 'touch') return;
+    if (!depo.sagTik || !(e.ctrlKey || e.metaKey) || e.shiftKey || secimModuAcik || !kok || bizdenMi(e)) return;
     const hedef = e.target instanceof Element ? e.target : null;
     if (!hedef) return;
     e.preventDefault(); e.stopPropagation();
