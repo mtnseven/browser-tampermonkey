@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Proje Ağacı
 // @namespace    metin-proje-agaci
-// @version      0.2.3
+// @version      0.2.4
 // @description  claude.ai/code sohbet listesini proje emojisine göre klasörlere ayırır; arşivli sohbetler, arama, filtreler, açık sohbete yeşil nokta
 // @match        https://claude.ai/code*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.2.3';
+  const SURUM = '0.2.4';
 
   /* ================================================================
      P1 · EMOJİ TABLOSU
@@ -535,14 +535,12 @@
       const sarCevir = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const yeni = kutu.dataset.sar !== '1';
-        kutu.dataset.sar = yeni ? '1' : '0';
-        if (yeni) sarKlasorler.add(anahtar);
-        else sarKlasorler.delete(anahtar);
-        try {
-          GM_setValue(SAR_ANAHTAR, [...sarKlasorler]);
-        } catch (er) {
-          /* oturum içinde sürer */
+        if (kutu.dataset.sar === '1') {
+          sarBirak(kutu, anahtar);
+        } else {
+          kutu.dataset.sar = '1';
+          sarKlasorler.add(anahtar);
+          sarYaz();
         }
       };
       sarD.addEventListener('click', sarCevir);
@@ -559,6 +557,8 @@
       kutu.dataset.acik = simdi ? '0' : '1';
       ok.textContent = simdi ? '▶' : '▼';
       if (!arama) acikAyarla(anahtar, !simdi);
+      // Klasör kapanınca sarma da kalkar; yeniden açılınca tek satır (0.2.4)
+      if (simdi && kutu.dataset.sar === '1') sarBirak(kutu, anahtar);
     };
     satir.addEventListener('click', cevir);
     satir.addEventListener('keydown', (e) => {
@@ -593,6 +593,20 @@
       return new Set();
     }
   })();
+
+  function sarYaz() {
+    try {
+      GM_setValue(SAR_ANAHTAR, [...sarKlasorler]);
+    } catch (e) {
+      /* oturum içinde sürer */
+    }
+  }
+
+  function sarBirak(kutu, anahtar) {
+    kutu.dataset.sar = '0';
+    sarKlasorler.delete(anahtar);
+    sarYaz();
+  }
 
   function panelCiz() {
     const panel = ogeYap('div', 'pa-panel');
@@ -738,6 +752,8 @@
       for (const k of klasorleriKur(acikKayitlar, arsiv.liste)) acikKlasorler.add(k.ad);
     } else {
       acikKlasorler = new Set();
+      sarKlasorler.clear();
+      sarYaz();
     }
     acikYaz(acikKlasorler);
     listeCiz();
