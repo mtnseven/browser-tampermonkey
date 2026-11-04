@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.0.2
-// @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai)
+// @version      2.1.0
+// @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
 // @noframes
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.0.2';
+  const SURUM = '2.1.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -221,6 +221,7 @@
     fontSuzgec: oku('fontSuzgec', 'hepsi'),
     fontOnbellek: oku('fontOnbellek', {}),
     fontVeri: oku('fontVeri', {}),
+    modelPencere: oku('modelPencere', true),
   };
   function kulDuzelt(k) {
     k = k && typeof k === 'object' ? k : {};
@@ -1285,6 +1286,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     o.push(boy);
     oge(`Ctrl+sağ tık ile seçme: ${depo.sagTik ? 'açık' : 'kapalı'}`, () => { depo.sagTik = !depo.sagTik; yaz('sagTik', depo.sagTik); menuCiz(); });
     oge(`Seçili nesneyi sayfada işaretle: ${depo.isaret ? 'açık' : 'kapalı'}`, () => { depo.isaret = !depo.isaret; yaz('isaret', depo.isaret); isaretCiz(); menuCiz(); });
+    if (PROFIL.ad === 'claude.ai') oge(`Model penceresi (tek pencere, Uygula ile): ${depo.modelPencere ? 'açık' : 'kapalı'}`, () => { modelPencereAyarla(!depo.modelPencere); menuCiz(); });
     bas('TANI');
     for (const s of [`Sürüm ${SURUM} · site ${SITE} · profil ${PROFIL.ad}`, `Stil yolu: ${stil.yol}${stil.hata ? ' (' + stil.hata + ')' : ''}`,
       `CSP ihlali: ${cspIhlal.length}${cspIhlal.length ? ' — ' + cspIhlal.slice(-3).map(x => x.yonerge).join(', ') : ''}`,
@@ -1770,6 +1772,448 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   }
 
   /* ================================================================
+     MODEL PENCERESİ — claude.ai model seçicisi tek pencerede
+     (Metin 04.11.2026). Modeller, Çaba ve Daha fazla model aynı
+     pencerede alt alta durur. Seçim pencereyi kapatmaz; üstteki
+     "Uygula" ya da pencere dışına tık uygular ve kapatır, Esc vazgeçer.
+     İçerik her açılışta claude.ai'nin kendi menüsünden okunur: yeni
+     model, yeni çaba düzeyi, yeni alt menü kendiliğinden gelir.
+     Uygulama özgün menüde aynı ada sahip öğeye tıklanarak yapılır.
+     Okuma ve uygulama sırasında özgün menü görünmez (st-mp-gizli).
+     Açılıp kapanır: ☰ → PANEL ve Tampermonkey menüsü.
+     ================================================================ */
+  const MP = {
+    // Sohbet: model-selector-dropdown · Code oturumu: epitaxy-cds-model-selector ·
+    // Code yeni oturum: environment-row-model (04.11.2026 gerçek sayfada okundu)
+    tetik: 'button[data-testid*="model-selector"], button[data-testid*="model"][aria-haspopup="menu"]',
+    menu: '[role="menu"]',
+    oge: '[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"], [role="separator"], [role="presentation"]',
+  };
+  const MP_CSS = `
+:host { all: initial; }
+* { box-sizing: border-box; }
+.mp { position: fixed; z-index: 2147483646; width: 312px; overflow-y: auto; overscroll-behavior: contain;
+  font: 13px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--mp-yazi);
+  background: var(--mp-zemin); border: 1px solid var(--mp-cizgi); border-radius: var(--mp-kose, 12px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35); padding: 4px 6px 6px; scrollbar-width: thin; }
+.ust { position: sticky; top: -4px; z-index: 1; display: flex; align-items: center; gap: 6px;
+  margin: -4px -6px 4px; padding: 6px 8px 6px 12px; background: var(--mp-zemin); border-bottom: 1px solid var(--mp-cizgi); }
+.ozet { flex: 1; min-width: 0; font-size: 11px; color: var(--mp-soluk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uygula { all: unset; cursor: pointer; font-size: 11px; line-height: 1; padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--mp-cizgi); color: var(--mp-soluk); }
+.uygula:hover, .uygula:focus-visible { color: var(--mp-yazi); border-color: var(--mp-soluk); }
+.uygula.degisti { background: var(--mp-vurgu); border-color: var(--mp-vurgu); color: #fff; }
+.bas { padding: 8px 8px 4px; font-size: 12px; color: var(--mp-soluk); }
+.cizgi { height: 1px; margin: 4px 2px; background: var(--mp-cizgi); }
+.oge { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.oge:hover, .oge:focus-visible { background: var(--mp-uzerinde); }
+.oge[aria-disabled="true"] { opacity: .45; cursor: default; }
+.metin { flex: 1; min-width: 0; }
+.ad { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rozet { font-size: 10.5px; line-height: 1; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--mp-cizgi); color: var(--mp-soluk); }
+.alt { font-size: 12px; color: var(--mp-soluk); margin-top: 2px; }
+.isaret { flex: 0 0 16px; text-align: center; color: var(--mp-vurgu); font-weight: 700; }
+.anahtar { flex: 0 0 28px; height: 16px; border-radius: 999px; background: var(--mp-cizgi); position: relative; }
+.anahtar::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--mp-soluk); transition: left .12s; }
+.anahtar.acik { background: var(--mp-vurgu); }
+.anahtar.acik::after { left: 14px; background: #fff; }
+.eylem { font-size: 12px; color: var(--mp-soluk); }
+.okunuyor { padding: 14px 10px; color: var(--mp-soluk); font-size: 12px; }
+`;
+  const MP_GIZLE_CSS = 'html.st-mp-gizli [role="menu"] { opacity: 0 !important; pointer-events: none !important; }';
+
+  let mpHost = null, mpKok = null, mpKutu = null, mpDurum = null, mpMesgul = false, mpGizleSayfa = null;
+  const mpBekle = ms => new Promise(r => setTimeout(r, ms));
+  async function mpKosul(fn, ms) {
+    const son = Date.now() + (ms || 1500);
+    for (;;) {
+      const v = fn();
+      if (v) return v;
+      if (Date.now() > son) return null;
+      await mpBekle(40);
+    }
+  }
+  function mpGizle(ac) {
+    if (!mpGizleSayfa) {
+      try {
+        mpGizleSayfa = new CSSStyleSheet();
+        mpGizleSayfa.replaceSync(MP_GIZLE_CSS);
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, mpGizleSayfa];
+      } catch (e) {
+        mpGizleSayfa = el('style', '', MP_GIZLE_CSS);
+        (document.head || document.documentElement).append(mpGizleSayfa);
+      }
+    }
+    document.documentElement.classList.toggle('st-mp-gizli', !!ac);
+  }
+
+  /* ---------- özgün menüyü sürme (yapay olaylar; yakalayıcı yalnız gerçek olayı tutar) ---------- */
+  function mpTetikBul(eski) {
+    if (eski && eski.isConnected) return eski;
+    return document.querySelector(MP.tetik);
+  }
+  const mpKokMenu = () => [...document.querySelectorAll(MP.menu)].find(m => !m.parentElement.closest(MP.menu) && !mpAltMenuMu(m)) || null;
+  // Alt menü, açtığı öğenin aria-controls'üyle bağlanır; bağ yoksa sıra belirler (ilk açılan kök)
+  function mpAltMenuMu(m) {
+    return !!(m.id && document.querySelector(`[role="menuitem"][aria-haspopup="menu"][aria-controls="${CSS.escape(m.id)}"]`));
+  }
+  function mpTikla(h) {
+    const o = { bubbles: true, cancelable: true, composed: true, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+    h.dispatchEvent(new PointerEvent('pointerdown', o));
+    h.dispatchEvent(new MouseEvent('mousedown', o));
+    h.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 })));
+    h.dispatchEvent(new MouseEvent('mouseup', Object.assign({}, o, { buttons: 0 })));
+    h.dispatchEvent(new MouseEvent('click', Object.assign({}, o, { buttons: 0 })));
+  }
+  const mpTus = (h, key) => h.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
+  async function mpMenuAc(tetik) {
+    const acik = mpKokMenu();
+    if (acik) return acik;
+    mpTikla(tetik);
+    return mpKosul(mpKokMenu, 1500);
+  }
+  async function mpMenuKapat(tetik) {
+    for (let i = 0; i < 3 && document.querySelector(MP.menu); i++) {
+      const m = [...document.querySelectorAll(MP.menu)].pop();
+      const h = m.querySelector('[role^="menuitem"]') || m;
+      try { h.focus(); } catch (e) { /* odaklanamazsa tuş yine gönderilir */ }
+      mpTus(h, 'Escape');
+      await mpKosul(() => !document.querySelector(MP.menu) || document.querySelectorAll(MP.menu).length <= 0, 400);
+    }
+    if (document.querySelector(MP.menu) && tetik) { mpTikla(tetik); await mpKosul(() => !document.querySelector(MP.menu), 600); }
+  }
+  async function mpAltAc(kokMenu, tetikOge) {
+    const once = new Set(document.querySelectorAll(MP.menu));
+    try { tetikOge.focus(); } catch (e) { /* olmazsa da tuş denenir */ }
+    mpTus(tetikOge, 'ArrowRight');
+    let alt = await mpKosul(() => [...document.querySelectorAll(MP.menu)].find(m => !once.has(m)), 900);
+    if (!alt) {
+      mpTikla(tetikOge);
+      alt = await mpKosul(() => [...document.querySelectorAll(MP.menu)].find(m => !once.has(m)), 900);
+    }
+    return alt;
+  }
+  async function mpAltKapat(alt) {
+    const h = alt.querySelector('[role^="menuitem"]') || alt;
+    try { h.focus(); } catch (e) { /* tuş yine gönderilir */ }
+    mpTus(h, 'ArrowLeft');
+    await mpKosul(() => !alt.isConnected || alt.getAttribute('data-closed') !== null || alt.hidden, 500);
+  }
+
+  /* ---------- öğe metni: ad, ad yanındaki rozet, alttaki açıklama ---------- */
+  function mpYapraklar(kokEl) {
+    const y = [];
+    const yuru = n => {
+      if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) y.push({ t, el: n.parentElement }); return; }
+      if (n.nodeType !== 1) return;
+      if (n.matches('.sr-only, [aria-hidden="true"], svg, [role="switch"], input')) return;
+      for (const c of n.childNodes) yuru(c);
+    };
+    yuru(kokEl);
+    return y;
+  }
+  function mpOgeMetni(oge) {
+    const y = mpYapraklar(oge);
+    if (!y.length) return { ad: '', rozet: [], alt: '' };
+    const kap2 = y[0].el && y[0].el.parentElement;
+    const rozet = [], alt = [];
+    for (const x of y.slice(1)) {
+      if (/^\d$/.test(x.t)) continue; // klavye kısayolu
+      (kap2 && kap2.contains(x.el) && x.el !== kap2 ? rozet : alt).push(x.t);
+    }
+    return { ad: y[0].t, rozet, alt: alt.join(' ') };
+  }
+  function mpSecili(oge) {
+    if (oge.getAttribute('aria-checked') === 'true') return true;
+    const sw = oge.querySelector('[role="switch"], input[type="checkbox"]');
+    return !!(sw && (sw.getAttribute('aria-checked') === 'true' || sw.checked));
+  }
+  function mpTur(oge) {
+    const r = oge.getAttribute('role');
+    if (r === 'menuitemradio') return 'radio';
+    if (r === 'menuitemcheckbox' || oge.querySelector('[role="switch"], input[type="checkbox"]')) return 'check';
+    return 'eylem';
+  }
+
+  /* ---------- menüyü oku → pencere modeli ---------- */
+  function mpMenuOgeleri(menu) {
+    return [...menu.querySelectorAll(MP.oge)].filter(x => x.closest(MP.menu) === menu && !x.parentElement.closest('[role^="menuitem"]'));
+  }
+  async function mpOku(tetik) {
+    const kok = await mpMenuAc(tetik);
+    if (!kok) return null;
+    const bolumler = [];
+    const ogeler = new Map();
+    let bolum = { baslik: '', aciklama: '', ogeler: [] };
+    const bolumBitir = () => { if (bolum.ogeler.length || bolum.baslik) bolumler.push(bolum); };
+    const ekle = (h, b, grup, altAd) => {
+      const tur = mpTur(h);
+      const m = mpOgeMetni(h);
+      if (!m.ad) return;
+      const anahtar = (altAd || '') + '\u0001' + m.ad;
+      const o = { anahtar, tur, ad: m.ad, rozet: m.rozet, alt: m.alt, secili: mpSecili(h), grup, altAd: altAd || '',
+        devre: h.getAttribute('aria-disabled') === 'true' || h.hasAttribute('data-disabled'),
+        href: h.tagName === 'A' ? h.href : '' };
+      ogeler.set(anahtar, o);
+      b.ogeler.push(o);
+    };
+    const kokOgeleri = mpMenuOgeleri(kok);
+    for (const h of kokOgeleri) {
+      const r = h.getAttribute('role');
+      if (r === 'separator') { if (bolum.ogeler.length) { bolumBitir(); bolum = { baslik: '', aciklama: '', ogeler: [] }; } continue; }
+      if (r === 'presentation') { const t = mpYapraklar(h).map(x => x.t).join(' '); if (t) bolum.aciklama = t; continue; }
+      if (h.getAttribute('aria-haspopup') === 'menu') {
+        const m = mpOgeMetni(h);
+        const degerli = mpYapraklar(h).length > 1; // "Çaba · Yüksek" gibi değer gösteren alt menü kendi grubudur
+        bolumBitir();
+        const altB = { baslik: m.ad, aciklama: '', ogeler: [] };
+        const alt = await mpAltAc(kok, h);
+        if (alt) {
+          for (const a of mpMenuOgeleri(alt)) {
+            const ar = a.getAttribute('role');
+            if (ar === 'separator' || a.getAttribute('aria-haspopup') === 'menu') continue;
+            if (ar === 'presentation') { const t = mpYapraklar(a).map(x => x.t).join(' '); if (t) altB.aciklama = t; continue; }
+            ekle(a, altB, degerli ? m.ad : 'kok', m.ad);
+          }
+          await mpAltKapat(alt);
+        }
+        bolumler.push(altB);
+        bolum = { baslik: '', aciklama: '', ogeler: [] };
+        continue;
+      }
+      ekle(h, bolum, 'kok', '');
+    }
+    bolumBitir();
+    const cs = getComputedStyle(kok);
+    const gorunum = { zemin: cs.backgroundColor, yazi: cs.color, kose: cs.borderTopLeftRadius, cizgi: cs.borderTopColor };
+    await mpMenuKapat(tetik);
+    if (!ogeler.size) return null;
+    const secim = new Map(), isaret = new Map();
+    for (const o of ogeler.values()) {
+      if (o.tur === 'radio') { if (!secim.has(o.grup) || o.secili) secim.set(o.grup, o.secili ? o.anahtar : secim.get(o.grup) || null); }
+      else if (o.tur === 'check') isaret.set(o.anahtar, o.secili);
+    }
+    return { tetik, bolumler, ogeler, gorunum, ilkSecim: new Map(secim), secim, ilkIsaret: new Map(isaret), isaret };
+  }
+
+  /* ---------- pencere ---------- */
+  function mpRenk(c, yedek) { return c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c) ? c : yedek; }
+  function mpKoyuMu(c) {
+    const m = String(c).match(/\d+(\.\d+)?/g);
+    if (!m) return true;
+    return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255 < 0.5;
+  }
+  function mpHostKur() {
+    if (mpHost && mpHost.isConnected) return;
+    mpHost = document.createElement('st-model');
+    mpHost.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646;';
+    mpKok = mpHost.attachShadow({ mode: 'open' });
+    try { const s = new CSSStyleSheet(); s.replaceSync(MP_CSS); mpKok.adoptedStyleSheets = [s]; } catch (e) { mpKok.append(el('style', '', MP_CSS)); }
+    document.documentElement.append(mpHost);
+  }
+  function mpDegistiMi(d) {
+    for (const [g, a] of d.secim) if (a !== d.ilkSecim.get(g)) return true;
+    for (const [a, v] of d.isaret) if (v !== d.ilkIsaret.get(a)) return true;
+    return false;
+  }
+  function mpOzet(d) {
+    const p = [];
+    for (const a of d.secim.values()) { const o = a && d.ogeler.get(a); if (o) p.push(o.ad); }
+    for (const [a, v] of d.isaret) if (v) { const o = d.ogeler.get(a); if (o) p.push(o.ad); }
+    return p.join(' · ');
+  }
+  function mpCiz() {
+    const d = mpDurum;
+    if (!d || !mpKutu) return;
+    const ust = el('div', 'ust');
+    const ozet = el('span', 'ozet', mpOzet(d));
+    const uyg = el('button', 'uygula' + (mpDegistiMi(d) ? ' degisti' : ''), 'Uygula');
+    uyg.type = 'button';
+    uyg.title = 'Seçimi uygula ve kapat (pencere dışına tık da uygular, Esc vazgeçer)';
+    uyg.addEventListener('click', () => mpUygula());
+    ust.append(ozet, uyg);
+    const parca = [ust];
+    let ilk = true;
+    for (const b of d.bolumler) {
+      if (!b.ogeler.length) continue;
+      if (!ilk) parca.push(el('div', 'cizgi'));
+      ilk = false;
+      if (b.baslik) { const h = el('div', 'bas', b.baslik); if (b.aciklama) h.title = b.aciklama; parca.push(h); }
+      for (const o of b.ogeler) {
+        const s = el('button', 'oge' + (o.tur === 'eylem' && !b.ogeler.some(x => x.tur === 'radio') ? ' eylem' : ''));
+        s.type = 'button';
+        if (o.devre) s.setAttribute('aria-disabled', 'true');
+        const metin = el('span', 'metin');
+        const ad = el('span', 'ad');
+        ad.append(el('span', '', o.ad));
+        for (const r of o.rozet) ad.append(el('span', 'rozet', r));
+        metin.append(ad);
+        if (o.alt) metin.append(el('div', 'alt', o.alt));
+        s.append(metin);
+        if (o.tur === 'radio') s.append(el('span', 'isaret', d.secim.get(o.grup) === o.anahtar ? '✓' : ''));
+        if (o.tur === 'check') s.append(el('span', 'anahtar' + (d.isaret.get(o.anahtar) ? ' acik' : '')));
+        s.addEventListener('click', () => mpOgeSec(o));
+        parca.push(s);
+      }
+    }
+    mpKutu.replaceChildren(...parca);
+  }
+  function mpYerlestir() {
+    if (!mpKutu || !mpDurum) return;
+    const t = mpTetikBul(mpDurum.tetik);
+    const r = t ? t.getBoundingClientRect() : { top: innerHeight - 60, bottom: innerHeight - 20, left: innerWidth - 320, right: innerWidth - 8 };
+    const gen = Math.min(312, innerWidth - 16);
+    mpKutu.style.width = gen + 'px';
+    mpKutu.style.left = Math.max(8, Math.min(innerWidth - gen - 8, r.right - gen)) + 'px';
+    const ust = r.top - 8, alt = innerHeight - r.bottom - 8;
+    if (ust >= alt || ust > 320) {
+      mpKutu.style.top = ''; mpKutu.style.bottom = (innerHeight - r.top + 6) + 'px'; mpKutu.style.maxHeight = (ust - 6) + 'px';
+    } else {
+      mpKutu.style.bottom = ''; mpKutu.style.top = (r.bottom + 6) + 'px'; mpKutu.style.maxHeight = (alt - 6) + 'px';
+    }
+  }
+  function mpOgeSec(o) {
+    const d = mpDurum;
+    if (!d || o.devre) return;
+    if (o.tur === 'radio') d.secim.set(o.grup, o.anahtar);
+    else if (o.tur === 'check') d.isaret.set(o.anahtar, !d.isaret.get(o.anahtar));
+    else { mpKapat(); mpEylem(d, o); return; }
+    mpCiz();
+  }
+  async function mpAc(tetik) {
+    if (mpMesgul) return;
+    mpMesgul = true;
+    mpHostKur();
+    mpKutu = el('div', 'mp');
+    mpKutu.setAttribute('role', 'dialog');
+    mpKutu.setAttribute('aria-label', 'Model seçimi');
+    mpKutu.append(el('div', 'okunuyor', 'Model listesi okunuyor…'));
+    mpKok.replaceChildren(mpKutu);
+    mpDurum = { tetik, bolumler: [], ogeler: new Map(), secim: new Map(), isaret: new Map(), ilkSecim: new Map(), ilkIsaret: new Map() };
+    mpYerlestir();
+    mpGizle(true);
+    let d = null;
+    try { d = await mpOku(tetik); } catch (e) { d = null; }
+    mpGizle(false);
+    mpMesgul = false;
+    if (!mpKutu) return; // okunurken kapatıldı
+    if (!d) {
+      mpKapat();
+      bildir('Model penceresi menüyü okuyamadı; özgün menü açılıyor');
+      mpTikla(tetik);
+      return;
+    }
+    const v = d.gorunum, koyu = mpKoyuMu(mpRenk(v.zemin, 'rgb(38,38,36)'));
+    const k = mpKutu.style;
+    k.setProperty('--mp-zemin', mpRenk(v.zemin, koyu ? '#2a2a28' : '#fff'));
+    k.setProperty('--mp-yazi', mpRenk(v.yazi, koyu ? '#eee' : '#222'));
+    k.setProperty('--mp-soluk', koyu ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)');
+    k.setProperty('--mp-cizgi', koyu ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.12)');
+    k.setProperty('--mp-uzerinde', koyu ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.05)');
+    k.setProperty('--mp-vurgu', '#3b82f6');
+    if (v.kose && v.kose !== '0px') k.setProperty('--mp-kose', v.kose);
+    mpDurum = d;
+    mpCiz();
+    mpYerlestir();
+  }
+  function mpKapat() {
+    if (mpKok) mpKok.replaceChildren();
+    mpKutu = null;
+    mpDurum = null;
+  }
+  async function mpEylem(d, o) {
+    if (o.href) { window.open(o.href, '_blank', 'noopener'); return; }
+    mpMesgul = true; mpGizle(true);
+    try { await mpOgeTikla(mpTetikBul(d.tetik), o); } finally { mpGizle(false); mpMesgul = false; }
+  }
+  async function mpOgeTikla(tetik, o, hedef) {
+    if (!tetik) return false;
+    const kok = await mpMenuAc(tetik);
+    if (!kok) return false;
+    let menu = kok;
+    if (o.altAd) {
+      const t = await mpKosul(() => mpMenuOgeleri(kok).find(h => h.getAttribute('aria-haspopup') === 'menu' && mpOgeMetni(h).ad === o.altAd), 800);
+      menu = t ? await mpAltAc(kok, t) : null;
+      if (!menu) { await mpMenuKapat(tetik); return false; }
+    }
+    const h = await mpKosul(() => mpMenuOgeleri(menu).find(x => x.getAttribute('aria-haspopup') !== 'menu' && mpOgeMetni(x).ad === o.ad), 800);
+    if (!h || h.getAttribute('aria-disabled') === 'true') { await mpMenuKapat(tetik); return false; }
+    if (hedef !== undefined && o.tur !== 'eylem' && mpSecili(h) === hedef) { await mpMenuKapat(tetik); return true; }
+    const once = mpSecili(h);
+    mpTikla(h);
+    await mpKosul(() => !document.querySelector(MP.menu) || (o.tur === 'check' && mpSecili(h) !== once), 900);
+    await mpMenuKapat(tetik);
+    return true;
+  }
+  function mpUygula() {
+    const d = mpDurum;
+    mpKapat();
+    if (d && !mpMesgul) mpIsle(d);
+  }
+  // Dışarı tık: basılı tuş bırakılınca uygulanır; yoksa sayfanın kendi
+  // "dışarı tık" algısı az önce açılan özgün menüyü kapatır (04.11.2026 denemesi)
+  function mpDisariUygula() {
+    const d = mpDurum;
+    mpKapat();
+    if (!d || mpMesgul) return;
+    let oldu = false;
+    const calis = () => { if (oldu) return; oldu = true; setTimeout(() => mpIsle(d), 80); };
+    window.addEventListener('click', calis, { capture: true, once: true });
+    setTimeout(calis, 700);
+  }
+  async function mpIsle(d) {
+    if (!mpDegistiMi(d)) return;
+    // Model değişince claude.ai çabayı o modelin varsayılanına döndürebilir
+    // (04.11.2026 denemesi): bir şey değiştiyse penceredeki bütün seçimler
+    // sırayla uygulanır; zaten seçili olan öğeye tıklanmaz.
+    const isler = [];
+    for (const a of d.secim.values()) if (a) isler.push([d.ogeler.get(a), true]);
+    for (const [a, v] of d.isaret) isler.push([d.ogeler.get(a), v]);
+    mpMesgul = true; mpGizle(true);
+    const olmayan = [];
+    try {
+      for (const [o, hedef] of isler) if (!(await mpOgeTikla(mpTetikBul(d.tetik), o, hedef))) olmayan.push(o.ad);
+    } finally { mpGizle(false); mpMesgul = false; }
+    if (olmayan.length) bildir('Uygulanamadı (bu seçimde yok): ' + olmayan.join(', '));
+  }
+
+  /* ---------- yakalama: yalnız gerçek (isTrusted) olaylar ---------- */
+  const mpAcikMi = () => !!(mpKutu && mpKutu.isConnected);
+  const mpBizde = e => !!mpHost && e.composedPath().includes(mpHost);
+  function mpTetikOlayi(e) {
+    if (!e.isTrusted || !depo.modelPencere || PROFIL.ad !== 'claude.ai') return null;
+    const h = e.target && e.target.closest ? e.target.closest(MP.tetik) : null;
+    return h;
+  }
+  for (const tur of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'touchstart', 'touchend']) {
+    window.addEventListener(tur, e => {
+      const t = mpTetikOlayi(e);
+      if (!t) {
+        if (tur === 'pointerdown' && e.isTrusted && mpAcikMi() && !mpBizde(e)) mpDisariUygula(); // dışarı tık uygular
+        return;
+      }
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (tur !== 'click') return;
+      if (mpAcikMi()) mpUygula(); else mpAc(t);
+    }, { capture: true, passive: false });
+  }
+  window.addEventListener('keydown', e => {
+    if (e.isTrusted && mpAcikMi() && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); mpKapat(); return; }
+    const t = mpTetikOlayi(e);
+    if (!t || !['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (mpAcikMi()) mpUygula(); else mpAc(t);
+  }, true);
+  window.addEventListener('resize', () => mpYerlestir());
+
+  function modelPencereAyarla(acik) {
+    depo.modelPencere = acik; yaz('modelPencere', acik);
+    if (!acik) mpKapat();
+    bildir('Model penceresi ' + (acik ? 'açık' : 'kapalı'));
+  }
+
+  /* ================================================================
      BAŞLAT
      ================================================================ */
   function baslat() {
@@ -1818,5 +2262,6 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   // Tampermonkey menüsü
   GM_registerMenuCommand('Site Tema paneli (' + KISAYOL + ')', () => paneliAc(!depo.acik));
   GM_registerMenuCommand('Sayfayı tara', () => tara());
+  if (PROFIL.ad === 'claude.ai') GM_registerMenuCommand('Model penceresi aç/kapat', () => modelPencereAyarla(!depo.modelPencere));
   for (const ad of temaAdlari()) GM_registerMenuCommand('Tema: ' + ad, () => temaDegistir(ad));
 })();

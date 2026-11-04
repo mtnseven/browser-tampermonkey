@@ -167,6 +167,71 @@ with sync_playwright() as p:
             s.wait_for_timeout(400)
             s.screenshot(path=f'{OUT}/v2_masaustu.png')
         c.close()
+    # Model penceresi (2.1.0): sahte model menüsü claude.ai'nin rol düzenini taklit eder
+    SAHTE_MENU = """(() => {
+      window.__mm = { model: 'Opus 5.5', caba: 'Yüksek' };
+      const tetik = document.querySelector('[data-testid="model-selector-dropdown"]');
+      const kapat = () => document.querySelectorAll('[role=menu]').forEach(m => m.remove());
+      const ciz = () => { tetik.textContent = __mm.model + ' ' + __mm.caba; };
+      const radyo = (ad, secili, is) => { const d = document.createElement('div'); d.setAttribute('role', 'menuitemradio');
+        d.setAttribute('aria-checked', String(secili)); d.tabIndex = -1; d.innerHTML = '<span><span>' + ad + '</span></span>';
+        d.addEventListener('click', () => { is(); kapat(); ciz(); }); return d; };
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') kapat(); });
+      tetik.addEventListener('click', () => {
+        if (document.querySelector('[role=menu]')) { kapat(); return; }
+        const m = document.createElement('div'); m.setAttribute('role', 'menu');
+        m.style.cssText = 'position:fixed;top:40px;left:300px;background:#333;color:#fff;padding:4px';
+        for (const ad of ['Opus 5.5', 'Sonnet 5.5']) m.append(radyo(ad, __mm.model === ad, () => { __mm.model = ad; __mm.caba = ad === 'Sonnet 5.5' ? 'Orta' : 'Yüksek'; }));
+        const ay = document.createElement('div'); ay.setAttribute('role', 'separator'); m.append(ay);
+        const alt = document.createElement('div'); alt.setAttribute('role', 'menuitem'); alt.setAttribute('aria-haspopup', 'menu'); alt.tabIndex = -1;
+        alt.innerHTML = '<span>Çaba</span><span><span>' + __mm.caba + '</span></span>';
+        alt.addEventListener('keydown', e => { if (e.key !== 'ArrowRight') return;
+          const s = document.createElement('div'); s.setAttribute('role', 'menu');
+          for (const c of ['Düşük', 'Orta', 'Yüksek']) s.append(radyo(c, __mm.caba === c, () => { __mm.caba = c; }));
+          s.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') s.remove(); });
+          document.body.append(s); });
+        m.append(alt); document.body.append(m);
+      });
+      ciz();
+    })()"""
+    MK = "document.querySelector('st-model') && document.querySelector('st-model').shadowRoot"
+    def mp_sec(s, ad):
+        s.evaluate(f"[...{MK}.querySelectorAll('.oge')].find(b => b.querySelector('.ad span').textContent === {json.dumps(ad)}).click()")
+        s.wait_for_timeout(60)
+    def mp_acik(s):
+        return s.evaluate(f"!!({MK} && {MK}.querySelector('.mp .oge'))")
+    c = b.new_context(viewport={'width': 1280, 'height': 860})
+    m = c.new_page(); mh = []
+    m.on('pageerror', lambda e: mh.append(str(e)))
+    m.add_init_script(SHIM + betik); m.goto(KOK + 'sahte.html'); m.wait_for_timeout(400)
+    m.evaluate(SAHTE_MENU)
+    TETIK = '[data-testid="model-selector-dropdown"]'
+    m.click(TETIK); m.wait_for_timeout(1500)
+    kontrol('model penceresi acildi', mp_acik(m) and m.evaluate(f"[...{MK}.querySelectorAll('.bas')].some(x => x.textContent === 'Çaba')"))
+    kontrol('model ozgun menu kapandi', m.evaluate("document.querySelectorAll('[role=menu]').length") == 0 and not m.evaluate("document.documentElement.classList.contains('st-mp-gizli')"))
+    mp_sec(m, 'Sonnet 5.5')
+    kontrol('model secim pencereyi kapatmaz', mp_acik(m) and m.evaluate(f"{MK}.querySelector('.ozet').textContent") == 'Sonnet 5.5 · Yüksek' and m.evaluate('__mm.model') == 'Opus 5.5')
+    m.mouse.click(700, 500); m.wait_for_timeout(2500)
+    kontrol('model disari tik uyguladi', not mp_acik(m) and m.evaluate('__mm') == {'model': 'Sonnet 5.5', 'caba': 'Yüksek'})
+    m.click(TETIK); m.wait_for_timeout(1500)
+    mp_sec(m, 'Opus 5.5'); mp_sec(m, 'Düşük')
+    m.evaluate(f"{MK}.querySelector('.uygula').click()"); m.wait_for_timeout(2500)
+    kontrol('model uygula dugmesi', not mp_acik(m) and m.evaluate('__mm') == {'model': 'Opus 5.5', 'caba': 'Düşük'})
+    m.click(TETIK); m.wait_for_timeout(1500)
+    mp_sec(m, 'Sonnet 5.5'); m.keyboard.press('Escape'); m.wait_for_timeout(600)
+    kontrol('model esc vazgecti', not mp_acik(m) and m.evaluate('__mm.model') == 'Opus 5.5')
+    m.click(TETIK); m.wait_for_timeout(1500)
+    m.click(TETIK); m.wait_for_timeout(600)
+    kontrol('model tetige ikinci tik kapatir', not mp_acik(m))
+    m.keyboard.press('Control+Shift+Y'); m.wait_for_timeout(150)
+    m.evaluate(f"[...{K}.querySelectorAll('.cubuk button')].find(b=>b.textContent==='☰').click()"); m.wait_for_timeout(80)
+    m.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent.startsWith('Model penceresi')).click()"); m.wait_for_timeout(80)
+    m.keyboard.press('Control+Shift+Y'); m.wait_for_timeout(150)
+    m.click(TETIK); m.wait_for_timeout(400)
+    kontrol('model kapaliyken ozgun menu', m.evaluate("__depo.modelPencere") is False and m.evaluate("document.querySelectorAll('[role=menu]').length") == 1 and not mp_acik(m))
+    kontrol('model hatasi yok', not mh)
+    if mh: print('   ', mh[:3])
+    c.close()
     # telefon
     c = b.new_context(viewport={'width': 400, 'height': 820}, is_mobile=True, has_touch=True, device_scale_factor=2)
     t2 = c.new_page(); th = []
