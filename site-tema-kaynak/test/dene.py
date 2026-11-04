@@ -247,5 +247,22 @@ with sync_playwright() as p:
     t2.screenshot(path=f'{OUT}/v2_telefon.png')
     kontrol('telefon hatasi yok', not th)
     if th: print('   ', th[:3])
+    c.close()
+    # Model penceresi telefonda (2.1.1): dokunuş pencereyi açmalı, pencere ekrana sığmalı
+    c = b.new_context(viewport={'width': 360, 'height': 740}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    t3 = c.new_page(); t3h = []
+    t3.on('pageerror', lambda e: t3h.append(str(e)))
+    t3.add_init_script(SHIM + betik); t3.goto(KOK + 'sahte.html'); t3.wait_for_timeout(400)
+    t3.evaluate(SAHTE_MENU)
+    r3 = t3.evaluate(f"(() => {{ const e = document.querySelector('{TETIK}'); e.style.cssText = 'position:fixed;left:16px;bottom:72px;z-index:2147483000'; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }})()")
+    t3.touchscreen.tap(r3[0], r3[1]); t3.wait_for_timeout(1500)
+    kontrol('telefon model dokunusla acildi', mp_acik(t3))
+    gen = t3.evaluate(f"(() => {{ const r = {MK}.querySelector('.mp').getBoundingClientRect(); return [r.left, r.right, r.width]; }})()") if mp_acik(t3) else [0, 999, 999]
+    kontrol('telefon model ekrana sigdi', gen[0] >= 0 and gen[1] <= 360 and gen[2] <= 280)
+    if mp_acik(t3):
+        mp_sec(t3, 'Sonnet 5.5'); t3.evaluate(f"{MK}.querySelector('.uygula').click()"); t3.wait_for_timeout(2500)
+    kontrol('telefon model uygulandi', t3.evaluate('__mm.model') == 'Sonnet 5.5')
+    kontrol('telefon model hatasi yok', not t3h)
+    if t3h: print('   ', t3h[:3])
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))

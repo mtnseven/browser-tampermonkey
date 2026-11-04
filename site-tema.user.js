@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.1.0
+// @version      2.1.1
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.1.0';
+  const SURUM = '2.1.1';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -2281,6 +2281,14 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
 .anahtar.acik::after { left: 14px; background: #fff; }
 .eylem { font-size: 12px; color: var(--mp-soluk); }
 .okunuyor { padding: 14px 10px; color: var(--mp-soluk); font-size: 12px; }
+/* Dar ekran (telefon): pencere ve satırlar küçülür (2.1.1, Metin 04.11.2026) */
+@media (max-width: 600px) {
+  .mp { font-size: 12px; padding: 2px 4px 4px; border-radius: 10px; }
+  .oge { padding: 4px 6px; gap: 6px; }
+  .bas { padding: 6px 6px 2px; font-size: 11px; }
+  .alt { font-size: 11px; margin-top: 1px; }
+  .rozet { font-size: 9.5px; padding: 1px 5px; }
+}
 `;
   const MP_GIZLE_CSS = 'html.st-mp-gizli [role="menu"] { opacity: 0 !important; pointer-events: none !important; }';
 
@@ -2524,7 +2532,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (!mpKutu || !mpDurum) return;
     const t = mpTetikBul(mpDurum.tetik);
     const r = t ? t.getBoundingClientRect() : { top: innerHeight - 60, bottom: innerHeight - 20, left: innerWidth - 320, right: innerWidth - 8 };
-    const gen = Math.min(312, innerWidth - 16);
+    const gen = Math.min(innerWidth <= 600 ? 272 : 312, innerWidth - 16);
     mpKutu.style.width = gen + 'px';
     mpKutu.style.left = Math.max(8, Math.min(innerWidth - gen - 8, r.right - gen)) + 'px';
     const ust = r.top - 8, alt = innerHeight - r.bottom - 8;
@@ -2654,7 +2662,10 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         if (tur === 'pointerdown' && e.isTrusted && mpAcikMi() && !mpBizde(e)) mpDisariUygula(); // dışarı tık uygular
         return;
       }
-      e.preventDefault(); e.stopImmediatePropagation();
+      // Dokunma olayında preventDefault tarayıcının ardından ürettiği
+      // click'i siler; telefonda dokunuş ölü kalıyordu (2.1.1, Firefox mobil)
+      if (tur !== 'touchstart' && tur !== 'touchend') e.preventDefault();
+      e.stopImmediatePropagation();
       if (tur !== 'click') return;
       if (mpAcikMi()) mpUygula(); else mpAc(t);
     }, { capture: true, passive: false });
