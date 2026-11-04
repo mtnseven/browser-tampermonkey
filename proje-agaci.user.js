@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Proje Ağacı
 // @namespace    metin-proje-agaci
-// @version      0.2.1
+// @version      0.2.2
 // @description  claude.ai/code sohbet listesini proje emojisine göre klasörlere ayırır; arşivli sohbetler, arama, filtreler, açık sohbete yeşil nokta
 // @match        https://claude.ai/code*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.2.1';
+  const SURUM = '0.2.2';
 
   /* ================================================================
      P1 · EMOJİ TABLOSU
@@ -404,7 +404,9 @@
 .pa-sohbet-ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pa-dugme[data-secili="1"] { opacity: 1; background: var(--df-hover, rgba(127,127,127,.18)); }
 .pa-panel[data-sar="1"] .pa-sohbet { align-items: flex-start; }
-.pa-panel[data-sar="1"] .pa-sohbet-ad { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.35; }
+.pa-panel[data-sar="1"] .pa-sohbet-ad { display: flex; white-space: normal; text-overflow: clip; line-height: 1.35; }
+.pa-panel[data-sar="1"] .pa-on { flex: 0 0 auto; white-space: pre; }
+.pa-panel[data-sar="1"] .pa-geri { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pa-panel[data-sar="1"] .pa-yuva { margin-top: .5em; }
 .pa-yuva { flex: 0 0 6px; width: 6px; height: 6px; display: inline-flex; }
 .pa-nokta { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%;
@@ -488,7 +490,14 @@
     a.dataset.arsiv = k.arsivli ? '1' : '0';
     const yuva = ogeYap('span', 'pa-yuva');
     if (aktifMi(k)) yuva.appendChild(noktaYap());
-    a.append(yuva, ogeYap('span', 'pa-sohbet-ad', k.ad));
+    // Ad iki parça yazılır, birleşimi uygulamadaki adın aynısıdır (P4).
+    // Sarılıyken alt satırlar emoji ve tarihin değil etiketlerin
+    // hizasından başlar (P15, 0.2.2).
+    const adKutu = ogeYap('span', 'pa-sohbet-ad');
+    const on = k.tarih ? (k.ad.match(/^(?:\S+\s+)?\d{6}\s*/) || [''])[0] : '';
+    if (on) adKutu.append(ogeYap('span', 'pa-on', on), ogeYap('span', 'pa-geri', k.ad.slice(on.length)));
+    else adKutu.appendChild(ogeYap('span', 'pa-geri', k.ad));
+    a.append(yuva, adKutu);
     a.addEventListener('click', (e) => {
       if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
