@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Proje Ağacı
 // @namespace    metin-proje-agaci
-// @version      0.2.2
+// @version      0.2.3
 // @description  claude.ai/code sohbet listesini proje emojisine göre klasörlere ayırır; arşivli sohbetler, arama, filtreler, açık sohbete yeşil nokta
 // @match        https://claude.ai/code*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.2.2';
+  const SURUM = '0.2.3';
 
   /* ================================================================
      P1 · EMOJİ TABLOSU
@@ -402,12 +402,15 @@
 .pa-sohbet[data-aktif="1"] { background: var(--df-hover, rgba(127,127,127,.18)); font-weight: 600; opacity: 1; }
 .pa-sohbet.pa-odak { box-shadow: inset 0 0 0 1px rgba(127,127,127,.6); }
 .pa-sohbet-ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pa-dugme[data-secili="1"] { opacity: 1; background: var(--df-hover, rgba(127,127,127,.18)); }
-.pa-panel[data-sar="1"] .pa-sohbet { align-items: flex-start; }
-.pa-panel[data-sar="1"] .pa-sohbet-ad { display: flex; white-space: normal; text-overflow: clip; line-height: 1.35; }
-.pa-panel[data-sar="1"] .pa-on { flex: 0 0 auto; white-space: pre; }
-.pa-panel[data-sar="1"] .pa-geri { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.pa-panel[data-sar="1"] .pa-yuva { margin-top: .5em; }
+.pa-sar { all: unset; cursor: pointer; flex: 0 0 auto; font-size: inherit; line-height: 1;
+  padding: 1px 5px; border-radius: 5px; opacity: .45; }
+.pa-sar:hover, .pa-sar:focus-visible { opacity: 1; background: var(--df-hover, rgba(127,127,127,.18)); }
+.pa-klasor[data-sar="1"] > .pa-klasor-satir > .pa-sar { opacity: 1; background: var(--df-hover, rgba(127,127,127,.18)); }
+.pa-klasor[data-sar="1"] .pa-sohbet { align-items: flex-start; }
+.pa-klasor[data-sar="1"] .pa-sohbet-ad { display: flex; white-space: normal; text-overflow: clip; line-height: 1.35; }
+.pa-klasor[data-sar="1"] .pa-on { flex: 0 0 auto; white-space: pre; }
+.pa-klasor[data-sar="1"] .pa-geri { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pa-klasor[data-sar="1"] .pa-yuva { margin-top: .5em; }
 .pa-yuva { flex: 0 0 6px; width: 6px; height: 6px; display: inline-flex; }
 .pa-nokta { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%;
   background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.22); }
@@ -521,6 +524,33 @@
     satir.append(ok, ogeYap('span', 'pa-klasor-ad', ad));
     if (nokta) satir.appendChild(noktaYap());
     satir.append(ogeYap('span', 'pa-bosluk'), ogeYap('span', 'pa-sayi', sayac));
+    // P15 · ↵ yalnız bu proje klasörünün sohbet adlarını sarar; arşivli
+    // alt klasör ana klasörü izler, kendi düğmesi yoktur (0.2.3)
+    if (sinif !== 'pa-alt') {
+      kutu.dataset.sar = sarKlasorler.has(anahtar) ? '1' : '0';
+      const sarD = ogeYap('span', 'pa-sar', '↵');
+      sarD.setAttribute('role', 'button');
+      sarD.tabIndex = 0;
+      sarD.title = 'Bu klasörde uzun adları alt satıra sar / tek satır';
+      const sarCevir = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const yeni = kutu.dataset.sar !== '1';
+        kutu.dataset.sar = yeni ? '1' : '0';
+        if (yeni) sarKlasorler.add(anahtar);
+        else sarKlasorler.delete(anahtar);
+        try {
+          GM_setValue(SAR_ANAHTAR, [...sarKlasorler]);
+        } catch (er) {
+          /* oturum içinde sürer */
+        }
+      };
+      sarD.addEventListener('click', sarCevir);
+      sarD.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') sarCevir(e);
+      });
+      satir.appendChild(sarD);
+    }
     const liste = ogeYap('div', 'pa-sohbetler');
     for (const s of satirlar) liste.appendChild(s);
     kutu.append(satir, liste);
@@ -549,22 +579,24 @@
 
   /* ----------------------------------------------------------------
      P15 · UZUN ADLARI SAR
-     Açıkken sohbet adı tek satıra kesilmez, tamamı görünecek kadar
-     alt satıra sarılır (Metin 04.11.2026). Durum hatırlanır.
+     Klasör satırının en sağındaki ↵ o klasörde sohbet adını tek
+     satıra kesmez, tamamı görünecek kadar alt satıra sarar (Metin
+     04.11.2026). Sarılı klasörler hatırlanır. 0.2.1-0.2.2'deki
+     başlık düğmesi kaldırıldı: liste kayınca ulaşılmıyordu (0.2.3).
      ---------------------------------------------------------------- */
   const SAR_ANAHTAR = 'proje-agaci-sar';
-  let sar = (() => {
+  const sarKlasorler = (() => {
     try {
-      return GM_getValue(SAR_ANAHTAR, false) === true;
+      const v = GM_getValue(SAR_ANAHTAR, []);
+      return new Set(Array.isArray(v) ? v : []);
     } catch (e) {
-      return false;
+      return new Set();
     }
   })();
 
   function panelCiz() {
     const panel = ogeYap('div', 'pa-panel');
     panel.id = 'pa-panel';
-    panel.dataset.sar = sar ? '1' : '0';
 
     const baslik = ogeYap('div', 'pa-baslik');
     baslik.appendChild(ogeYap('span', 'pa-baslik-ad', 'Proje Ağacı'));
@@ -579,17 +611,6 @@
     dugme('⊞', 'Bütün klasörleri aç', () => tumunuCevir(true));
     dugme('⊟', 'Bütün klasörleri kapat', () => tumunuCevir(false));
     dugme('◎', 'Açık sohbete git', aktifeGit);
-    const sarDugme = dugme('↵', 'Uzun adları alt satıra sar / tek satır', () => {
-      sar = !sar;
-      try {
-        GM_setValue(SAR_ANAHTAR, sar);
-      } catch (e) {
-        /* oturum içinde sürer */
-      }
-      panel.dataset.sar = sar ? '1' : '0';
-      sarDugme.dataset.secili = sar ? '1' : '0';
-    });
-    sarDugme.dataset.secili = sar ? '1' : '0';
     dugme('↻', 'Listeyi ve arşivi yeniden oku', () => {
       arsiv.durum = 'bekliyor';
       kur(true);
