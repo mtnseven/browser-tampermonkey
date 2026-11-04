@@ -184,7 +184,7 @@ with sync_playwright() as p:
         for (const ad of ['Opus 5.5', 'Sonnet 5.5']) m.append(radyo(ad, __mm.model === ad, () => { __mm.model = ad; __mm.caba = ad === 'Sonnet 5.5' ? 'Orta' : 'Yüksek'; }));
         const ay = document.createElement('div'); ay.setAttribute('role', 'separator'); m.append(ay);
         const alt = document.createElement('div'); alt.setAttribute('role', 'menuitem'); alt.setAttribute('aria-haspopup', 'menu'); alt.tabIndex = -1;
-        alt.innerHTML = '<span>Çaba</span><span><span>' + __mm.caba + '</span></span>';
+        alt.innerHTML = window.__degersiz ? '<span>Çaba</span>' : '<span>Çaba</span><span><span>' + __mm.caba + '</span></span>';
         alt.addEventListener('keydown', e => { if (e.key !== 'ArrowRight') return;
           const s = document.createElement('div'); s.setAttribute('role', 'menu');
           for (const c of ['Düşük', 'Orta', 'Yüksek']) s.append(radyo(c, __mm.caba === c, () => { __mm.caba = c; }));
@@ -253,15 +253,19 @@ with sync_playwright() as p:
     t3 = c.new_page(); t3h = []
     t3.on('pageerror', lambda e: t3h.append(str(e)))
     t3.add_init_script(SHIM + betik); t3.goto(KOK + 'sahte.html'); t3.wait_for_timeout(400)
-    t3.evaluate(SAHTE_MENU)
+    t3.evaluate('window.__degersiz = true'); t3.evaluate(SAHTE_MENU)
     r3 = t3.evaluate(f"(() => {{ const e = document.querySelector('{TETIK}'); e.style.cssText = 'position:fixed;left:16px;bottom:72px;z-index:2147483000'; const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }})()")
     t3.touchscreen.tap(r3[0], r3[1]); t3.wait_for_timeout(1500)
     kontrol('telefon model dokunusla acildi', mp_acik(t3))
     gen = t3.evaluate(f"(() => {{ const r = {MK}.querySelector('.mp').getBoundingClientRect(); return [r.left, r.right, r.width]; }})()") if mp_acik(t3) else [0, 999, 999]
     kontrol('telefon model ekrana sigdi', gen[0] >= 0 and gen[1] <= 360 and gen[2] <= 280)
     if mp_acik(t3):
-        mp_sec(t3, 'Sonnet 5.5'); t3.evaluate(f"{MK}.querySelector('.uygula').click()"); t3.wait_for_timeout(2500)
-    kontrol('telefon model uygulandi', t3.evaluate('__mm.model') == 'Sonnet 5.5')
+        mp_sec(t3, 'Sonnet 5.5'); mp_sec(t3, 'Düşük')
+    isaretler = t3.evaluate(f"[...{MK}.querySelectorAll('.oge')].filter(b => b.querySelector('.isaret') && b.querySelector('.isaret').textContent === '✓').map(b => b.querySelector('.ad span').textContent)") if mp_acik(t3) else []
+    kontrol('telefon model ve caba ayri grup', isaretler == ['Sonnet 5.5', 'Düşük'])
+    if mp_acik(t3):
+        t3.evaluate(f"{MK}.querySelector('.uygula').click()"); t3.wait_for_timeout(3000)
+    kontrol('telefon model uygulandi', t3.evaluate('__mm') == {'model': 'Sonnet 5.5', 'caba': 'Düşük'})
     kontrol('telefon model hatasi yok', not t3h)
     if t3h: print('   ', t3h[:3])
     b.close()

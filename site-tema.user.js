@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.1.1
+// @version      2.1.2
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.1.1';
+  const SURUM = '2.1.2';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -2428,9 +2428,10 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       b.ogeler.push(o);
     };
     const kokOgeleri = mpMenuOgeleri(kok);
+    let kesit = 0; // kök menüde çizgiyle ayrılan bölümün sırası; aday grup adı
     for (const h of kokOgeleri) {
       const r = h.getAttribute('role');
-      if (r === 'separator') { if (bolum.ogeler.length) { bolumBitir(); bolum = { baslik: '', aciklama: '', ogeler: [] }; } continue; }
+      if (r === 'separator') { kesit++; if (bolum.ogeler.length) { bolumBitir(); bolum = { baslik: '', aciklama: '', ogeler: [] }; } continue; }
       if (r === 'presentation') { const t = mpYapraklar(h).map(x => x.t).join(' '); if (t) bolum.aciklama = t; continue; }
       if (h.getAttribute('aria-haspopup') === 'menu') {
         const m = mpOgeMetni(h);
@@ -2443,7 +2444,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
             const ar = a.getAttribute('role');
             if (ar === 'separator' || a.getAttribute('aria-haspopup') === 'menu') continue;
             if (ar === 'presentation') { const t = mpYapraklar(a).map(x => x.t).join(' '); if (t) altB.aciklama = t; continue; }
-            ekle(a, altB, degerli ? m.ad : 'kok', m.ad);
+            ekle(a, altB, degerli ? m.ad : 'alt\u0001' + m.ad, m.ad);
           }
           await mpAltKapat(alt);
         }
@@ -2451,13 +2452,26 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         bolum = { baslik: '', aciklama: '', ogeler: [] };
         continue;
       }
-      ekle(h, bolum, 'kok', '');
+      ekle(h, bolum, 'kok\u0001' + kesit, '');
     }
     bolumBitir();
     const cs = getComputedStyle(kok);
     const gorunum = { zemin: cs.backgroundColor, yazi: cs.color, kose: cs.borderTopLeftRadius, cizgi: cs.borderTopColor };
     await mpMenuKapat(tetik);
     if (!ogeler.size) return null;
+    // Aday gruplar birleşir: kök bölümler ve değer göstermeyen alt menüler
+    // ilk kök radyo grubuna katılır; ikisinde de seçili radyo varsa ayrı
+    // gruptur (bir radyo grubunda tek seçili olur). Telefonda claude.ai
+    // Çaba'yı değersiz gösteriyor, model ile çaba birleşiyordu (2.1.2,
+    // Metin 04.11.2026).
+    const radyolar = [...ogeler.values()].filter(o => o.tur === 'radio');
+    const adaylar = [...new Set(radyolar.map(o => o.grup))].filter(g => !radyolar.some(o => o.grup === g && o.altAd && g === o.altAd));
+    const taban = adaylar.find(g => g.startsWith('kok\u0001')) || adaylar[0];
+    const seciliVar = g => radyolar.some(o => o.grup === g && o.secili);
+    for (const g of adaylar) {
+      if (g === taban || (seciliVar(g) && seciliVar(taban))) continue;
+      for (const o of radyolar) if (o.grup === g) o.grup = taban;
+    }
     const secim = new Map(), isaret = new Map();
     for (const o of ogeler.values()) {
       if (o.tur === 'radio') { if (!secim.has(o.grup) || o.secili) secim.set(o.grup, o.secili ? o.anahtar : secim.get(o.grup) || null); }
