@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Proje Ağacı
 // @namespace    metin-proje-agaci
-// @version      0.2.0
+// @version      0.2.1
 // @description  claude.ai/code sohbet listesini proje emojisine göre klasörlere ayırır; arşivli sohbetler, arama, filtreler, açık sohbete yeşil nokta
 // @match        https://claude.ai/code*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '0.2.0';
+  const SURUM = '0.2.1';
 
   /* ================================================================
      P1 · EMOJİ TABLOSU
@@ -402,6 +402,10 @@
 .pa-sohbet[data-aktif="1"] { background: var(--df-hover, rgba(127,127,127,.18)); font-weight: 600; opacity: 1; }
 .pa-sohbet.pa-odak { box-shadow: inset 0 0 0 1px rgba(127,127,127,.6); }
 .pa-sohbet-ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-dugme[data-secili="1"] { opacity: 1; background: var(--df-hover, rgba(127,127,127,.18)); }
+.pa-panel[data-sar="1"] .pa-sohbet { align-items: flex-start; }
+.pa-panel[data-sar="1"] .pa-sohbet-ad { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.35; }
+.pa-panel[data-sar="1"] .pa-yuva { margin-top: .5em; }
 .pa-yuva { flex: 0 0 6px; width: 6px; height: 6px; display: inline-flex; }
 .pa-nokta { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%;
   background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.22); }
@@ -534,9 +538,24 @@
      ---------------------------------------------------------------- */
   let acikKayitlar = [];
 
+  /* ----------------------------------------------------------------
+     P15 · UZUN ADLARI SAR
+     Açıkken sohbet adı tek satıra kesilmez, tamamı görünecek kadar
+     alt satıra sarılır (Metin 04.11.2026). Durum hatırlanır.
+     ---------------------------------------------------------------- */
+  const SAR_ANAHTAR = 'proje-agaci-sar';
+  let sar = (() => {
+    try {
+      return GM_getValue(SAR_ANAHTAR, false) === true;
+    } catch (e) {
+      return false;
+    }
+  })();
+
   function panelCiz() {
     const panel = ogeYap('div', 'pa-panel');
     panel.id = 'pa-panel';
+    panel.dataset.sar = sar ? '1' : '0';
 
     const baslik = ogeYap('div', 'pa-baslik');
     baslik.appendChild(ogeYap('span', 'pa-baslik-ad', 'Proje Ağacı'));
@@ -551,6 +570,17 @@
     dugme('⊞', 'Bütün klasörleri aç', () => tumunuCevir(true));
     dugme('⊟', 'Bütün klasörleri kapat', () => tumunuCevir(false));
     dugme('◎', 'Açık sohbete git', aktifeGit);
+    const sarDugme = dugme('↵', 'Uzun adları alt satıra sar / tek satır', () => {
+      sar = !sar;
+      try {
+        GM_setValue(SAR_ANAHTAR, sar);
+      } catch (e) {
+        /* oturum içinde sürer */
+      }
+      panel.dataset.sar = sar ? '1' : '0';
+      sarDugme.dataset.secili = sar ? '1' : '0';
+    });
+    sarDugme.dataset.secili = sar ? '1' : '0';
     dugme('↻', 'Listeyi ve arşivi yeniden oku', () => {
       arsiv.durum = 'bekliyor';
       kur(true);
