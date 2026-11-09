@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.1.2
+// @version      2.2.0
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.1.2';
+  const SURUM = '2.2.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -690,6 +690,8 @@ div[class*="attachment"] {
     k.ozelNesneler = Array.isArray(k.ozelNesneler) ? k.ozelNesneler : [];
     k.fontlar = Array.isArray(k.fontlar) ? k.fontlar : [];
     k.silinen = Array.isArray(k.silinen) ? k.silinen : [];
+    // Kaydedilmemiş değişiklikler tema başına; null = kayıtlı değeri kaldır (2.2.0)
+    k.taslaklar = k.taslaklar && typeof k.taslaklar === 'object' ? k.taslaklar : {};
     return k;
   }
   depo.kul = kulDuzelt(depo.kul);
@@ -726,19 +728,43 @@ div[class*="attachment"] {
   function tema(ad) {
     if (!temaAdlari().includes(ad)) ad = 'Orijinal';
     const h = ad === 'Orijinal' ? { temel: 'orijinal' } : (HAZIR_TEMALAR[ad] || {});
-    const k = (KS.temalar || {})[ad] || {}, u = depo.kul.temalar[ad] || {};
-    let temel = ad === 'Orijinal' ? 'orijinal' : (u.temel || k.temel || h.temel || 'goz');
+    const k = (KS.temalar || {})[ad] || {}, u = depo.kul.temalar[ad] || {}, ts = depo.kul.taslaklar[ad] || {};
+    let temel = ad === 'Orijinal' ? 'orijinal' : (ts.temel || u.temel || k.temel || h.temel || 'goz');
     if (!PROFIL.gozTemasi) temel = 'orijinal';
-    const degerler = Object.assign({}, VARSAYILAN_DEGER, h.degerler || {}, k.degerler || {}, u.degerler || {});
-    const nesneler = {};
-    for (const kaynak of [h.nesneler || {}, k.nesneler || {}, u.nesneler || {}]) {
+    const taban = Object.assign({}, VARSAYILAN_DEGER, h.degerler || {}, k.degerler || {});
+    const degerler = Object.assign({}, taban, u.degerler || {});
+    for (const [p, v] of Object.entries(ts.degerler || {})) {
+      if (v !== null) degerler[p] = v; else if (p in taban) degerler[p] = taban[p]; else delete degerler[p];
+    }
+    const nesneTaban = {}, nesneler = {};
+    for (const kaynak of [h.nesneler || {}, k.nesneler || {}]) {
+      for (const [id, o] of Object.entries(kaynak)) nesneTaban[id] = Object.assign({}, nesneTaban[id], o);
+    }
+    for (const kaynak of [nesneTaban, u.nesneler || {}]) {
       for (const [id, o] of Object.entries(kaynak)) nesneler[id] = Object.assign({}, nesneler[id], o);
+    }
+    for (const [id, o] of Object.entries(ts.nesneler || {})) {
+      const n = nesneler[id] = Object.assign({}, nesneler[id]);
+      for (const [p, v] of Object.entries(o)) {
+        if (v !== null) n[p] = v; else if ((nesneTaban[id] || {})[p] !== undefined) n[p] = nesneTaban[id][p]; else delete n[p];
+      }
     }
     for (const o of Object.values(nesneler)) for (const [p, v] of Object.entries(o)) if (v === null || v === '') delete o[p];
     return { ad, temel, degerler, nesneler };
   }
   const aktif = () => tema(depo.tema);
 
+  function taslak(ad) {
+    const t = depo.kul.taslaklar[ad] || (depo.kul.taslaklar[ad] = {});
+    t.degerler = t.degerler || {}; t.nesneler = t.nesneler || {};
+    return t;
+  }
+  // Kaydedilmemiş değişiklik sayısı (2.2.0)
+  function taslakSayisi(ad) {
+    const t = depo.kul.taslaklar[ad];
+    if (!t) return 0;
+    return Object.keys(t.degerler || {}).length + Object.values(t.nesneler || {}).reduce((x, o) => x + Object.keys(o).length, 0) + (t.temel ? 1 : 0);
+  }
   function kulTema(ad) {
     const u = depo.kul.temalar[ad] || (depo.kul.temalar[ad] = {});
     u.degerler = u.degerler || {}; u.nesneler = u.nesneler || {};
@@ -789,8 +815,11 @@ div[class*="attachment"] {
   // Yalnız kullanıcının değiştirdiği (↺ ile geri alınabilen) değer var mı
   function kullaniciDegeriVar(n, oz) {
     if (n.tur === 'panel') return (depo.panelOzel[depo.panelTema] || {})[n.degisken] !== undefined;
-    const u = depo.kul.temalar[depo.tema] || {};
-    if (n.tur === 'degisken' || n.tur === 'font') return (u.degerler || {})[n.degisken] !== undefined;
+    const u = depo.kul.temalar[depo.tema] || {}, ts = depo.kul.taslaklar[depo.tema] || {};
+    if (n.tur === 'degisken' || n.tur === 'font') {
+      const d = (ts.degerler || {})[n.degisken];
+      return d !== undefined ? d !== null : (u.degerler || {})[n.degisken] !== undefined;
+    }
     return ozDeger(n, oz) !== undefined;
   }
   function ilkOge(n) {
@@ -816,17 +845,21 @@ div[class*="attachment"] {
       panelKaydet(); panelRenkUygula();
       return;
     }
-    const u = kulTema(depo.tema);
+    // Değişiklik taslağa gider; kayıtlı tema Kaydet'e kadar değişmez (2.2.0)
+    const ts = taslak(depo.tema), u = depo.kul.temalar[depo.tema] || {};
     if (n.tur === 'degisken' || n.tur === 'font') {
-      if (bos) delete u.degerler[n.degisken];
-      else u.degerler[n.degisken] = n.tur === 'font' ? aileYigini(v) : v;
+      const kayitli = (u.degerler || {})[n.degisken] !== undefined;
+      if (bos) { if (kayitli) ts.degerler[n.degisken] = null; else delete ts.degerler[n.degisken]; }
+      else ts.degerler[n.degisken] = n.tur === 'font' ? aileYigini(v) : v;
     } else {
-      const o = u.nesneler[n.id] || (u.nesneler[n.id] = {});
-      if (bos) delete o[oz]; else o[oz] = v;
-      if (!Object.keys(o).length) delete u.nesneler[n.id];
+      const o = ts.nesneler[n.id] || (ts.nesneler[n.id] = {});
+      const kayitli = ((u.nesneler || {})[n.id] || {})[oz] !== undefined;
+      if (bos) { if (kayitli) o[oz] = null; else delete o[oz]; } else o[oz] = v;
+      if (!Object.keys(o).length) delete ts.nesneler[n.id];
     }
+    if (!taslakSayisi(depo.tema)) delete depo.kul.taslaklar[depo.tema];
     if (oz === 'aile' && !bos) fontHazirla(v);
-    kulKaydet(); uygula();
+    kulKaydet(); uygula(); taslakCiz();
   }
 
   /* ================================================================
@@ -1172,6 +1205,11 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
 .cubuk select { max-width: 132px; min-width: 0; }
 .cubuk button { padding: 3px 7px; }
 .cubuk button.acik { background: var(--p-vurgu); color: var(--p-vurgu-yazi); border-color: var(--p-vurgu); }
+.taslak { flex: none; display: none; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 8px; background: var(--p-cubuk); border-bottom: 1px solid var(--p-cizgi); }
+.taslak.acik { display: flex; }
+.taslak .not { color: var(--p-uyari); margin-right: auto; white-space: nowrap; }
+.taslak button { padding: 2px 7px; }
+.taslak button.kaydet { background: var(--p-vurgu); color: var(--p-vurgu-yazi); border-color: var(--p-vurgu); }
 .acilir { position: absolute; top: 40px; left: 6px; right: 6px; max-height: calc(100% - 60px); overflow: auto; background: var(--p-cubuk);
   border: 1px solid var(--p-cizgi2); border-radius: 6px; box-shadow: 0 8px 28px rgba(0,0,0,.45); z-index: 5; padding: 4px; display: none; }
 .acilir.acik { display: block; }
@@ -1261,7 +1299,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
 .font-liste .oge small { color: var(--p-yazi3); font-family: ui-monospace, monospace; font-size: .75em; margin-left: 6px; }
 `;
 
-  let kok, kap, panelEl, acilirEl, secimEl, ayarEl, bolgeLb, nesneLb, isaretKat, temaSec, geriB, ileriB, gecmisB, menuB, cokluB, dosyaGirdi;
+  let kok, kap, panelEl, acilirEl, taslakEl, secimEl, ayarEl, bolgeLb, nesneLb, isaretKat, temaSec, geriB, ileriB, gecmisB, menuB, cokluB, dosyaGirdi;
 
   function el(etiket, sinif, metin) {
     const e = document.createElement(etiket);
@@ -1327,6 +1365,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     const kapat = dug('×', `Kapat (${KISAYOL})`, () => paneliAc(false));
     cubuk.append(ad, temaSec, geriB, ileriB, gecmisB, menuB, kapat);
     acilirEl = el('div', 'acilir');
+    // Kaydedilmemiş değişiklik satırı (2.2.0)
+    taslakEl = el('div', 'taslak');
 
     secimEl = el('div', 'secim');
     ayarEl = el('div', 'ayar');
@@ -1352,7 +1392,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       dosyaGirdi.value = '';
     });
 
-    panelEl.append(tutamak, cubuk, acilirEl, ayarEl, listeler, secimEl, dosyaGirdi);
+    panelEl.append(tutamak, cubuk, taslakEl, acilirEl, ayarEl, listeler, secimEl, dosyaGirdi);
     isaretKat = el('div', 'isaret-kat');
     kap.append(isaretKat, panelEl, dugme);
     kok.append(kap);
@@ -1375,9 +1415,9 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   function cubukBoya() {
     if (!temaSec) return;
     temaSec.replaceChildren(...temaAdlari().map(a => {
-      const n = islenmemis(a);
-      return new Option(a + (n ? ` •${n}` : ''), a, false, a === depo.tema);
+      return new Option(a + (taslakSayisi(a) ? ' ●' : ''), a, false, a === depo.tema);
     }));
+    taslakCiz();
     temaSec.title = 'Sayfa teması' + (islenmemis(depo.tema) ? ` · ${islenmemis(depo.tema)} değişiklik yalnız bu cihazda (betiğe işlenmemiş)` : '');
     geriB.disabled = gecmis.konum <= 0;
     ileriB.disabled = gecmis.konum >= gecmis.liste.length - 1;
@@ -1719,7 +1759,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     oge('Yeni tema (bu temanın kopyası)…', temaKopyala);
     if (!hazirMi(depo.tema)) oge('Temanın adını değiştir…', temaAdDegistir);
     const n = islenmemis(depo.tema);
-    if (n && hazirMi(depo.tema)) oge(`Bu temayı sıfırla (${n} değişiklik)`, temaSifirla);
+    if ((n || taslakSayisi(depo.tema)) && hazirMi(depo.tema)) oge('Fabrika ayarına dön', temaSifirla);
     if (depo.tema !== 'Orijinal') oge('Temayı listeden kaldır', temaSil);
     if (depo.kul.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.kul.silinen = []; kulKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
     bas('PANEL TEMASI');
@@ -1840,19 +1880,61 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (!ad || !ad.trim() || ad.trim() === eski) return;
     const yeni = benzersizAd(ad.trim());
     depo.kul.temalar[yeni] = depo.kul.temalar[eski]; delete depo.kul.temalar[eski];
+    if (depo.kul.taslaklar[eski]) { depo.kul.taslaklar[yeni] = depo.kul.taslaklar[eski]; delete depo.kul.taslaklar[eski]; }
     kulKaydet(); acilirKapat(); temaDegistir(yeni);
   }
   function temaSifirla() {
-    delete depo.kul.temalar[depo.tema];
+    if (!confirm(`"${depo.tema}" ilk hâline dönsün mü? Kayıtlı ve kaydedilmemiş değişiklikleri silinir. (Geçmişten geri alınabilir.)`)) return;
+    delete depo.kul.temalar[depo.tema]; delete depo.kul.taslaklar[depo.tema];
     kulKaydet(); uygula(true); acilirKapat(); hepsiniCiz(); anlik('Tema sıfırlandı: ' + depo.tema);
   }
   function temaSil() {
     const ad = depo.tema;
     if (!confirm(`"${ad}" teması listeden kaldırılsın mı? (Geçmişten geri alınabilir.)`)) return;
     if (hazirMi(ad)) { if (!depo.kul.silinen.includes(ad)) depo.kul.silinen.push(ad); }
-    delete depo.kul.temalar[ad];
+    delete depo.kul.temalar[ad]; delete depo.kul.taslaklar[ad];
     kulKaydet(); acilirKapat();
     temaDegistir(temaAdlari()[0]);
+  }
+  // Taslak: Kaydet üzerine yazar, Farklı kaydet yeni tema açar, Vazgeç siler (2.2.0)
+  function taslakCiz() {
+    if (!taslakEl) return;
+    const n = taslakSayisi(depo.tema);
+    taslakEl.classList.toggle('acik', !!n);
+    if (!n) { taslakEl.replaceChildren(); return; }
+    taslakEl.replaceChildren(
+      Object.assign(el('span', 'not', `● ${n} kaydedilmedi`), { title: `${n} değişiklik yalnız taslakta; "${depo.tema}" kaydı değişmedi` }),
+      dug('Kaydet', `"${depo.tema}" temasının üzerine yaz`, taslakKaydet, 'kaydet'),
+      dug('Farklı kaydet…', 'Yeni tema olarak kaydet; bu tema değişmez', taslakFarkliKaydet),
+      dug('Vazgeç', 'Kaydedilmemiş değişiklikleri sil', taslakVazgec));
+  }
+  function taslakKaydet() {
+    const ad = depo.tema, ts = depo.kul.taslaklar[ad];
+    if (!ts) return;
+    if (hazirMi(ad) && !confirm(`Hazır tema "${ad}" değiştirilsin mi? (Sonra ☰ → "Fabrika ayarına dön" ile ilk hâline döner.)`)) return;
+    const u = kulTema(ad);
+    if (ts.temel) u.temel = ts.temel;
+    for (const [p, v] of Object.entries(ts.degerler || {})) { if (v === null) delete u.degerler[p]; else u.degerler[p] = v; }
+    for (const [id, o] of Object.entries(ts.nesneler || {})) {
+      const h = u.nesneler[id] || (u.nesneler[id] = {});
+      for (const [p, v] of Object.entries(o)) { if (v === null) delete h[p]; else h[p] = v; }
+      if (!Object.keys(h).length) delete u.nesneler[id];
+    }
+    delete depo.kul.taslaklar[ad];
+    kulKaydet(); uygula(true); hepsiniCiz(); anlik('Kaydedildi: ' + ad);
+  }
+  function taslakFarkliKaydet() {
+    const t = aktif();
+    const ad = prompt('Yeni temanın adı:', benzersizAd(t.ad + ' 2'));
+    if (!ad || !ad.trim()) return;
+    const yeni = benzersizAd(ad.trim());
+    depo.kul.temalar[yeni] = { temel: t.temel, degerler: kopya(t.temel === 'goz' ? t.degerler : {}), nesneler: kopya(t.nesneler) };
+    delete depo.kul.taslaklar[t.ad];
+    kulKaydet(); acilirKapat(); temaDegistir(yeni);
+  }
+  function taslakVazgec() {
+    delete depo.kul.taslaklar[depo.tema];
+    kulKaydet(); uygula(true); hepsiniCiz(); anlik('Vazgeçildi: ' + depo.tema);
   }
 
   /* ---------------- dosya ve pano (0005) ---------------- */
@@ -1925,11 +2007,49 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     const t = oku(SK('tarama'), null);
     return t && t.ogeler ? t : { sayfalar: [], ogeler: {} };
   }
+  // Göz teması kurallarının bu sayfada kaç öğe eşlediği ve sitenin kendi CSS değişkenleri (2.2.0)
+  function kuralTara(t) {
+    t.kurallar = t.kurallar || {}; t.siteDegiskenleri = t.siteDegiskenleri || {};
+    const yol = location.pathname.replace(/[0-9a-f-]{20,}/g, '…');
+    const sade = x => x.replace(/::?[\w-]+(\([^)]*\))?/g, m => /^:(not|is|where|has)\(/.test(m) ? m : '').trim() || '*';
+    const gez = kurallar => {
+      for (const k of kurallar) {
+        if (k.cssRules && !k.selectorText) { gez(k.cssRules); continue; }
+        if (!k.selectorText) continue;
+        for (const parca of k.selectorText.split(/,(?![^(]*\))/)) {
+          const sec = parca.trim();
+          if (!sec || sec === ':root') continue;
+          let sayi;
+          try { sayi = document.querySelectorAll(sade(sec)).length; } catch (e) { sayi = -1; }
+          const kayit = t.kurallar[sec] || (t.kurallar[sec] = { sayi: 0, sayfalar: {} });
+          kayit.sayi = Math.max(kayit.sayi, sayi); kayit.sayfalar[yol] = sayi;
+        }
+      }
+    };
+    try { const ss = new CSSStyleSheet(); ss.replaceSync(KURALLAR); gez(ss.cssRules); } catch (e) { t.kuralHata = String(e); }
+    for (const ss of document.styleSheets) {
+      if (kok && ss.ownerNode && kok.contains && kok.contains(ss.ownerNode)) continue;
+      let kurallar;
+      try { kurallar = ss.cssRules; } catch (e) { continue; }
+      const gezD = ks => {
+        for (const k of ks) {
+          if (k.cssRules && !k.style) { gezD(k.cssRules); continue; }
+          if (!k.style || !k.selectorText || !/:root|html|\.dark|data-theme|data-mode/.test(k.selectorText)) continue;
+          for (const ad of k.style) {
+            if (!ad.startsWith('--') || Object.keys(t.siteDegiskenleri).length > 600) continue;
+            const anahtar = k.selectorText.slice(0, 40) + ' ' + ad;
+            t.siteDegiskenleri[anahtar] = k.style.getPropertyValue(ad).trim().slice(0, 60);
+          }
+        }
+      };
+      gezD(kurallar);
+    }
+  }
   const uretilmis = s => /\d{4,}|[a-f0-9]{10,}|^:r|radix-|^_/i.test(s);
   function tara() {
     const t = taramaOku();
     const host = kok && kok.host;
-    const SECICI = '[data-testid], [aria-label], [role], nav, header, main, aside, footer, form, fieldset, textarea, input, select, button, a[href], [contenteditable="true"], pre, code, h1, h2, h3, ul, ol, dialog, [id], [class*="font-"], [class*="message"], [class*="artifact"], [class*="file"]';
+    const SECICI = '[data-testid], [aria-label], [role], nav, header, main, aside, footer, form, fieldset, textarea, input, select, button, a[href], [contenteditable="true"], pre, code, h1, h2, h3, ul, ol, dialog, [id], [class*="font-"], [class*="message"], [class*="artifact"], [class*="file"], [class*="prose"], [class*="markdown"], [data-is-streaming], [data-test-render-count]';
     const yol = e => {
       const p = [];
       for (let u = e.parentElement; u && u !== document.body && p.length < 4; u = u.parentElement) {
@@ -1957,6 +2077,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       try { kayit.sayi = Math.max(kayit.sayi, document.querySelectorAll(s).length); } catch (er) { /* bozuk seçici */ }
       if (!kayit.sayfalar.includes(location.pathname.replace(/[0-9a-f-]{20,}/g, '…'))) kayit.sayfalar.push(location.pathname.replace(/[0-9a-f-]{20,}/g, '…'));
     }
+    kuralTara(t);
     t.sayfalar.push({ yol: location.pathname.replace(/[0-9a-f-]{20,}/g, '…'), baslik: document.title.slice(0, 60), tarih: new Date().toISOString(), gorunum: [innerWidth, innerHeight], oge: n });
     yaz(SK('tarama'), t);
     bildir(`Tarandı: ${n} öğe, ${yeni} yeni. Başka ekranları da açıp tekrar tara; sonra ☰ → Tarama dosyasını kaydet.`);
@@ -1968,6 +2089,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       stilYolu: stil.yol, stilHata: stil.hata, cspIhlal,
       profilEslesme: tumNesneler().filter(n => n.tur === 'oge').map(n => ({ id: n.id, ad: n.ad, secici: n.secici, sayi: eslesme(n) })),
       sayfalar: t.sayfalar, ogeler: Object.values(t.ogeler),
+      kurallar: t.kurallar || {}, kuralHata: t.kuralHata || '', siteDegiskenleri: t.siteDegiskenleri || {},
     };
   }
   function taramaKaydet() {
@@ -2044,7 +2166,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (!n || !n.ozel) { bildir('Yalnız eklenen (turuncu) nesne silinir'); return; }
     if (!confirm(`"${n.ad}" listeden silinsin mi? (Geçmişten geri alınabilir.)`)) return;
     depo.kul.ozelNesneler = depo.kul.ozelNesneler.filter(o => o.id !== n.id);
-    for (const t of Object.values(depo.kul.temalar)) if (t.nesneler) delete t.nesneler[n.id];
+    for (const t of Object.values(depo.kul.temalar).concat(Object.values(depo.kul.taslaklar))) if (t.nesneler) delete t.nesneler[n.id];
     durum.secim = durum.secim.filter(s => s !== n.id);
     kulKaydet(); uygula(); anlik('Nesne silindi: ' + n.ad); secimDegisti();
   }
