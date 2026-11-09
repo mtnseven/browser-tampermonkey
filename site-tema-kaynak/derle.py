@@ -2,7 +2,7 @@
 # Stylus CSS'ini betiğe gömer: :root bloğu DEGISKENLER dizisine,
 # geri kalanı KURALLAR metnine; yazı tipi listesi FONTLAR'a.
 # Kullanım: derle.py tema.css sablon.js cikti.js [fontlar_google.json]
-import json, re, sys
+import json, os, re, sys
 
 css_yol, sablon_yol, cikti_yol = sys.argv[1:4]
 css = open(css_yol, encoding='utf-8').read()
@@ -40,9 +40,12 @@ if '`' in kurallar or '${' in kurallar:
 js = open(sablon_yol, encoding='utf-8').read()
 js = js.replace('/*@DEGISKENLER@*/[]', json.dumps(degiskenler, ensure_ascii=False, indent=2))
 js = js.replace('/*@KURALLAR@*/', kurallar)
+# Otomatik site haritası (0026 3b) ayrı dosyada; gerçek sayfaya tek başına da enjekte edilir
+oto = open(os.path.join(os.path.dirname(os.path.abspath(sablon_yol)), 'oto_harita.js'), encoding='utf-8').read().rstrip('\n')
+js = js.replace('/*@OTO_HARITA@*/', oto)
 fontlar = json.load(open(sys.argv[4] if len(sys.argv) > 4 else 'fontlar_google.json', encoding='utf-8'))
 js = js.replace('/*@FONTLAR@*/[]', json.dumps(fontlar, ensure_ascii=False, separators=(',', ':')))
-for yer_tutucu in ('/*@DEGISKENLER@*/', '/*@KURALLAR@*/', '/*@FONTLAR@*/'):
+for yer_tutucu in ('/*@DEGISKENLER@*/', '/*@KURALLAR@*/', '/*@FONTLAR@*/', '/*@OTO_HARITA@*/'):
     if yer_tutucu in js:
         sys.exit('RED: doldurulmamis ' + yer_tutucu)
 open(cikti_yol, 'w', encoding='utf-8').write(js)

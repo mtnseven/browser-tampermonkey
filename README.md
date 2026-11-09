@@ -6,7 +6,7 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 
 | Betik | Sürüm | Ne yapar | Kurulum |
 |---|---|---|---|
-| Site Tema | 2.4.0 | Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai). Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
+| Site Tema | 2.5.0 | Bütün sitelere göz teması ve canlı ayar paneli; claude.ai el yapımı haritayla, öteki siteler otomatik haritayla. Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
 | Proje Ağacı | 0.2.4 | claude.ai/code sohbet listesini başlıktaki proje emojisine göre klasörlere ayırır; klasör içinde en yeni üstte, emojisiz sohbetler Projesiz'de. Arşivli sohbetler, arama (#etiket), filtreler, açık sohbete yeşil nokta, klasör satırındaki ↵ ile o klasörde uzun adları alt satıra sarma. Yalnız bilgisayar | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/proje-agaci.user.js) |
 | Makro Menü | 8.2 | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir. Dişli düğme sürüklenir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | 3.4 | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
@@ -28,7 +28,9 @@ Panel tek ayar yeridir. Altta iki liste vardır: solda bölge (Sol menü, Sohbet
 | Temalar | Sayfa: Göz, Gece mavisi, Grafit, Kağıt (açık), Orijinal. Panel: Gece, Grafit, Lacivert, Orman, Kağıt (açık), Sis (açık) — ☰ menüsünde |
 | Temalar ve siteler | Temanın renkleri bütün sitelerde ortaktır; nesne ayarı (boyut, aralık…) yalnız o sitede kalır. ☰ → "Yalnız bu site için başka tema seç" |
 | Ayar taşıma | ☰ → Tümünü dosyaya kaydet (bütün siteler, temalar, panel, yüklenen yazı tipleri) / Dosyadan yükle (yedek, eski site ayarı, Claude Tema dosyası) |
-| Kısayollar | Yazı tipi düğmesi seçiliyken `↑ ↓` sıradaki yazı tipi (liste açılmadan; `PageUp/PageDown` 10). Sayı ve kaydırıcıda `Shift+ok` 10 adım. Renk kutusunda `← →` doygunluk, `↑ ↓` parlaklık; ton çubuğunda `← →`. Bölge ve nesne listesinde `↑ ↓`. `Ctrl+S` taslağı kaydeder. Renk noktasının iki ekseni ayrıca kaydırıcıdır (sağda parlaklık, altta doygunluk) |
+| Kısayollar | Yazı tipi düğmesi seçiliyken `↑ ↓` sıradaki yazı tipi (liste açılmadan; `PageUp/PageDown` 10); listeden seçimden sonra düğme seçili kalır, liste açıkken ✓ işareti gezilen yazı tipine yürür. Sayı ve kaydırıcıda `Shift+ok` 10 adım. Renk kutusunda `← →` doygunluk, `↑ ↓` parlaklık; ton çubuğunda `← →`. Bölge ve nesne listesinde `↑ ↓`. `Ctrl+S` taslağı kaydeder. Renk noktasının iki ekseni ayrıca kaydırıcıdır (sağda parlaklık, altta doygunluk) |
+| Öteki siteler | Haritası olmayan sitede sayfanın kendi renkleri ölçülür, temanın rollerine eşlenir (geniş paneller, kutular, renkli vurgular, ana ve soluk yazı, metin içi bağlantılar, çerçeveler); yeni gelen öğeler de işaretlenir. Bu roller panelde "Otomatik harita" bölgesinde nesne olarak ayarlanır. Sayfanın kendi teması değişirse ☰ → Haritayı yeniden ölç |
+| Bu sitede kapalı | ☰ ya da Tampermonkey menüsü → "Site Tema: … için kapat"; geri açmak için Tampermonkey menüsü → "Site Tema: … için aç" |
 | Sekmeler | Bir sekmedeki değişiklik (sohbet, Claude Code) açık öteki claude.ai sekmelerine yenilemeden gelir |
 | Sayfa taraması | ☰ → Sayfayı tara (birkaç ekranda) → Tarama dosyasını kaydet |
 
@@ -36,7 +38,7 @@ Telefonda dikey tutulunca panel alttan, yan çevrilince sağdan açılır; uzun 
 
 ## Klasörler
 
-`site-tema-kaynak/` Site Tema'nın kaynağıdır. `sablon.user.js` kod, `stylus_goz_tema.css` temanın renk ve kuralları, `fontlar_google.json` yazı tipi listesi; `derle.py` bunları kökteki `site-tema.user.js` dosyasına derler. `test/` sahte claude.ai sayfasında (CSP'li sürümü de var) otomatik testtir:
+`site-tema-kaynak/` Site Tema'nın kaynağıdır. `sablon.user.js` kod, `oto_harita.js` otomatik site haritası, `stylus_goz_tema.css` temanın renk ve kuralları, `fontlar_google.json` yazı tipi listesi; `derle.py` bunları kökteki `site-tema.user.js` dosyasına derler. `test/` sahte claude.ai sayfasında (CSP'li sürümü de var) otomatik testtir:
 
 ```
 cd site-tema-kaynak && python3 derle.py stylus_goz_tema.css sablon.user.js ../site-tema.user.js fontlar_google.json

@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.4.0
-// @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
-// @match        https://claude.ai/*
+// @version      2.5.0
+// @description  Bütün sitelere göz teması ve canlı ayar paneli (claude.ai el yapımı harita, öteki siteler otomatik harita); claude.ai model seçicisi tek pencerede
+// @match        *://*/*
 // @run-at       document-start
 // @noframes
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js
@@ -23,10 +23,15 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.4.0';
+  const SURUM = '2.5.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
+  // Bu sitede kapalıysa hiçbir şey kurulmaz; yalnız açma komutu kalır (0026 3b)
+  if (GM_getValue(SITE + ':kapali', false)) {
+    GM_registerMenuCommand(`Site Tema: ${SITE} için aç`, () => { GM_setValue(SITE + ':kapali', false); location.reload(); });
+    return;
+  }
 
   /* ================================================================
      KALICI AYAR — Metin'in onayladığı varsayılanlar, site başına (0004).
@@ -567,6 +572,214 @@ div[class*="attachment"] {
   const VARSAYILAN_DEGER = Object.fromEntries(DEGISKENLER.map(d => [d.ad, d.deger]));
 
   /* ================================================================
+     OTOMATİK SİTE HARİTASI (0026 3b) — el yapımı haritası olmayan
+     sitede sayfanın kendi zemin, yazı ve çerçeve renkleri ölçülür,
+     palet rollerine eşlenir ve öğeye işaret olarak yazılır:
+       data-st-z  zemin : ana | koyu | kutu | vurgu
+       data-st-y  yazı  : ana | soluk | link | vurgu
+       data-st-c  çerçeve (değer 1)
+     Ölçüm temanın stil sayfası kapalıyken yapılır; böylece sayfanın
+     asıl renkleri okunur. Yeni öğeler MutationObserver ile işaretlenir.
+     Bu blok kendi başına çalışır (gerçek sayfaya ayrıca enjekte edilip
+     denenebilir); dış bağımlılığı yalnız aldığı seçeneklerdir:
+       atla(el)      : true dönerse öğe işlenmez (panelin kökü)
+       stilKapat(b)  : temanın stil sayfasını kapatır / açar
+       etkin()       : false ise ölçüm yapılmaz (tema Orijinal)
+     ================================================================ */
+  function otoHaritaKur(o) {
+    const ISARETLER = ['data-st-z', 'data-st-y', 'data-st-c'];
+    const islendi = new WeakSet(), zeminBilgi = new WeakMap();
+    const kuyruk = new Set();
+    let L0 = null, zaman = 0, sonTur = 0, gozcu = null, sayac = { tur: 0, oge: 0, sure: 0 };
+    // Renk metni (rgb, oklch, color()) tuvalle sRGB'ye çevrilir
+    const tuval = document.createElement('canvas'); tuval.width = tuval.height = 1;
+    const cz = tuval.getContext('2d', { willReadFrequently: true });
+    const renkOnbellek = new Map();
+    function renk(s) {
+      if (!s || s === 'transparent' || s === 'rgba(0, 0, 0, 0)') return null;
+      if (renkOnbellek.has(s)) return renkOnbellek.get(s);
+      let r = null;
+      const m = /^rgba?\(([^)]+)\)$/.exec(s);
+      if (m) {
+        const p = m[1].split(/[\s,/]+/).filter(Boolean).map(parseFloat);
+        r = [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+      } else {
+        cz.clearRect(0, 0, 1, 1); cz.fillStyle = '#000'; cz.fillStyle = s; cz.fillRect(0, 0, 1, 1);
+        const d = cz.getImageData(0, 0, 1, 1).data;
+        r = [d[0], d[1], d[2], d[3] / 255];
+      }
+      if (r[3] === 0) r = null;
+      if (renkOnbellek.size > 500) renkOnbellek.clear();
+      renkOnbellek.set(s, r);
+      return r;
+    }
+    const kanal = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const isik = r => 0.2126 * kanal(r[0]) + 0.7152 * kanal(r[1]) + 0.0722 * kanal(r[2]);
+    const karsitlik = (a, b) => { const x = isik(a), y = isik(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const doygunluk = r => { const mx = Math.max(r[0], r[1], r[2]) / 255, mn = Math.min(r[0], r[1], r[2]) / 255, l = (mx + mn) / 2; return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)); };
+    const karistir = (on, arka) => on[3] >= 1 ? on : [0, 1, 2].map(i => on[i] * on[3] + arka[i] * (1 - on[3])).concat(1);
+    const YAZILI = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/;
+    const ATLA = /^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE|BR|HEAD|TITLE|SOURCE|TRACK|IMG|VIDEO|CANVAS|IFRAME|PICTURE|OBJECT|EMBED|AUDIO)$/;
+    function yaziTasir(el) {
+      if (el.tagName === 'svg' || YAZILI.test(el.tagName)) return true;
+      for (let n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3 && /\S/.test(n.data)) return true;
+      return false;
+    }
+    // Satır içi bağlantı: metin akışındaki <a>; menüdeki ya da düğme gibi bağlantı değil
+    function satirIciBag(el) {
+      const p = el.parentElement;
+      if (!p || /^(NAV|ASIDE|HEADER|FOOTER|BUTTON)$/.test(p.tagName)) return false;
+      if (/^(P|LI|TD|DD|BLOCKQUOTE|SPAN|EM|STRONG)$/.test(p.tagName)) return true;
+      for (let n = p.firstChild; n; n = n.nextSibling) if (n.nodeType === 3 && /\S/.test(n.data)) return true;
+      return false;
+    }
+    // Öğenin altındaki ilk dolu zemin (kendisi dahil); sonuç önbellekte kalır
+    function altZemin(el) {
+      for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+        if (zeminBilgi.has(e)) { const b = zeminBilgi.get(e); if (b) return b; continue; }
+        const r = renk(getComputedStyle(e).backgroundColor);
+        const b = r && r[3] >= 0.5 ? { renk: r, rol: null } : null;
+        zeminBilgi.set(e, b);
+        if (b) return b;
+      }
+      return { renk: L0 > 0.5 ? [255, 255, 255, 1] : [0, 0, 0, 1], rol: 'ana' };
+    }
+    function zeminRolu(el, cs, r) {
+      const L = isik(r), s = doygunluk(r);
+      const k = el.getBoundingClientRect(), alan = k.width * k.height, ekran = innerWidth * innerHeight;
+      if (s >= 0.4 && L > 0.03 && L < 0.8 && alan < 0.05 * ekran) return 'vurgu';
+      if (Math.abs(L - L0) < 0.02) return 'ana';
+      if (alan >= 0.1 * ekran || k.height >= 0.6 * innerHeight || k.width >= 0.6 * innerWidth) return 'koyu';
+      return 'kutu';
+    }
+    function sayfaIsigi() {
+      for (const e of [document.body, document.documentElement]) {
+        const r = e && renk(getComputedStyle(e).backgroundColor);
+        if (r && r[3] >= 0.5) return isik(r);
+      }
+      return 1;
+    }
+    function isle(liste) {
+      const t0 = performance.now(), yazilacak = [];
+      o.stilKapat(true);
+      try {
+        if (L0 === null) L0 = sayfaIsigi();
+        for (const el of liste) {
+          // Kod bloğu ve içi işaretlenmez: zemini genel kural verir, sözdizimi renkleri sitenin kalır
+          if (!el.isConnected || o.atla(el) || ATLA.test(el.tagName) || el.ownerSVGElement || el.closest('pre')) continue;
+          islendi.add(el);
+          const cs = getComputedStyle(el);
+          // zemin
+          const r = renk(cs.backgroundColor);
+          let z = null;
+          if (r && r[3] >= 0.5 && cs.backgroundImage.indexOf('url(') < 0) z = el === document.body || el === document.documentElement ? 'ana' : zeminRolu(el, cs, r);
+          zeminBilgi.set(el, r && r[3] >= 0.5 ? { renk: r, rol: z } : null);
+          if (z) yazilacak.push([el, 'data-st-z', z]);
+          // yazı
+          if (yaziTasir(el)) {
+            const y = renk(cs.color), alt = altZemin(el);
+            let rol = null;
+            if (alt.rol === 'vurgu') rol = 'vurgu';
+            else if (el.tagName === 'A' && satirIciBag(el)) rol = 'link';
+            else if (y) rol = karsitlik(karistir(y, alt.renk), alt.renk) >= 5.5 ? 'ana' : 'soluk';
+            if (rol) yazilacak.push([el, 'data-st-y', rol]);
+          }
+          // çerçeve
+          if (cs.borderTopStyle !== 'none' || cs.borderRightStyle !== 'none' || cs.borderBottomStyle !== 'none' || cs.borderLeftStyle !== 'none') {
+            const kalin = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderRightWidth) + parseFloat(cs.borderBottomWidth) + parseFloat(cs.borderLeftWidth);
+            const c = renk(cs.borderTopColor) || renk(cs.borderBottomColor) || renk(cs.borderLeftColor);
+            if (kalin > 0 && c) yazilacak.push([el, 'data-st-c', '1']);
+          }
+        }
+      } finally { o.stilKapat(false); }
+      for (const [el, a, v] of yazilacak) if (el.getAttribute(a) !== v) el.setAttribute(a, v);
+      sayac.tur++; sayac.oge += liste.length; sayac.sure = Math.round(performance.now() - t0);
+    }
+    function topla() {
+      const liste = [];
+      for (const k of kuyruk) {
+        if (!k.isConnected) continue;
+        if (!islendi.has(k)) liste.push(k);
+        for (const e of k.querySelectorAll('*')) if (!islendi.has(e)) liste.push(e);
+        if (liste.length > 6000) break;
+      }
+      kuyruk.clear();
+      return liste;
+    }
+    function tur() {
+      zaman = 0; sonTur = Date.now();
+      if (!o.etkin() || !document.body) { kuyruk.clear(); return; }
+      const liste = topla();
+      if (liste.length) isle(liste);
+    }
+    // Sık değişen sayfada (akan yanıt) en çok yarım saniyede bir tur
+    function planla() {
+      if (zaman) return;
+      zaman = setTimeout(tur, Math.max(80, 500 - (Date.now() - sonTur)));
+    }
+    function baslat() {
+      if (gozcu || !document.documentElement) return;
+      gozcu = new MutationObserver(kayitlar => {
+        for (const k of kayitlar) {
+          for (const n of k.addedNodes) {
+            if (n.nodeType === 1) kuyruk.add(n);
+            // Sonradan metin alan öğe yazı rengi için yeniden bakılır
+            else if (n.nodeType === 3 && k.target.nodeType === 1 && !k.target.hasAttribute('data-st-y')) { islendi.delete(k.target); kuyruk.add(k.target); }
+          }
+        }
+        if (kuyruk.size) planla();
+      });
+      gozcu.observe(document.documentElement, { childList: true, subtree: true });
+      hepsi();
+    }
+    function hepsi() { if (document.body) { kuyruk.add(document.documentElement); planla(); } }
+    // Bütün işaretleri silip baştan ölçer (sayfanın kendi teması değiştiyse)
+    function yenile() {
+      for (const a of ISARETLER) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a);
+      L0 = null;
+      kuyruk.clear();
+      for (const e of document.querySelectorAll('*')) islendi.delete(e);
+      islendi.delete(document.documentElement);
+      zeminBilgiSil();
+      hepsi();
+    }
+    function zeminBilgiSil() { for (const e of document.querySelectorAll('*')) zeminBilgi.delete(e); }
+    function durdur() { if (gozcu) gozcu.disconnect(); gozcu = null; clearTimeout(zaman); zaman = 0; }
+    function ozet() {
+      const s = {};
+      for (const a of ISARETLER) for (const e of document.querySelectorAll(`[${a}]`)) { const k = a.slice(8) + ':' + e.getAttribute(a); s[k] = (s[k] || 0) + 1; }
+      return { roller: s, tur: sayac.tur, oge: sayac.oge, sonSure: sayac.sure, sayfaIsigi: L0 === null ? null : Math.round(L0 * 1000) / 1000 };
+    }
+    return { baslat, hepsi, yenile, durdur, ozet, simdi: tur };
+  }
+
+  // Otomatik haritanın kuralları: renkler palet rollerinden (0026 3b). Önce genel
+  // (anlamsal etiket) kurallar, sonra işaretler; :root öneki işareti öne geçirir.
+  const GENEL_KURALLAR = String.raw`
+html, body { background-color: var(--zemin-ana) !important; color: var(--metin-ana) !important; }
+:is(header, nav, aside, footer, [role="banner"], [role="navigation"], [role="complementary"]) { background-color: var(--zemin-koyu) !important; }
+:is(input, textarea, select, [contenteditable="true"]) { background-color: var(--zemin-koyu) !important; color: var(--metin-ana) !important; caret-color: var(--metin-parlak) !important; }
+::placeholder { color: var(--metin-placeholder) !important; opacity: 1 !important; }
+:is([data-placeholder], .placeholder)::before { color: var(--metin-placeholder) !important; }
+:is(dialog, [role="dialog"], [role="menu"], [role="listbox"]) { background-color: var(--zemin-kutu) !important; }
+pre { background-color: var(--kod-zemin) !important; color: var(--kod-duz) !important; }
+pre * { background-color: transparent !important; }
+:not(pre) > code { background-color: var(--zemin-kutu) !important; color: var(--kod-satirici) !important; }
+:is(p, li, td, dd, blockquote) > a { color: var(--link) !important; }
+* { scrollbar-color: var(--kaydirma) transparent; }
+:root [data-st-z="ana"] { background-color: var(--zemin-ana) !important; }
+:root [data-st-z="koyu"] { background-color: var(--zemin-koyu) !important; }
+:root [data-st-z="kutu"] { background-color: var(--zemin-kutu) !important; }
+:root [data-st-z="vurgu"] { background-color: var(--vurgu-yesil) !important; }
+:root [data-st-y="ana"] { color: var(--metin-ana) !important; }
+:root [data-st-y="soluk"] { color: var(--metin-soluk) !important; }
+:root [data-st-y="link"] { color: var(--link) !important; }
+:root [data-st-y="link"]:hover { color: var(--link-hover) !important; }
+:root [data-st-y="vurgu"] { color: var(--zemin-ana) !important; }
+:root [data-st-c] { border-color: var(--cerceve) !important; }
+`;
+
+  /* ================================================================
      HAZIR SAYFA TEMALARI — Göz temasının kurallarını kullanır, yalnız
      renk değerleri değişir. Astigmat için saf beyaz ve saf siyah
      yazı/zemin çifti kullanılmaz (Göz Metin'in kendi teması, aynen).
@@ -638,7 +851,8 @@ div[class*="attachment"] {
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
-      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[class*="bg-accent"], [data-cds="Badge"]' },
+      // 09.11.2026 gerçek sayfa: [class*="bg-accent"] 58 düğmenin basılı-durum katmanını tutuyordu; rozet yalnız Badge (2.5.0)
+      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[data-cds="Badge"]' },
       { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'aside.dframe-sidebar, nav.h-screen' },
       { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: '.dframe-sidebar .hit-row, ul.flex.flex-col.gap-px li a' },
       { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: '[data-testid="chat-header"], header' },
@@ -648,21 +862,43 @@ div[class*="attachment"] {
       { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '[data-testid="assistant-message"] .prose, .font-claude-response, .font-claude-response-body, .font-claude-message' },
       { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: ':is(.prose, .standard-markdown) code:not(pre code), .font-claude-response code, .font-claude-response-body code' },
       { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: '.epitaxy-codeblock, div:has(> pre.code-block__code), pre, .code-block__code' },
-      { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: 'div[class*="attachment"], div[class*="file-upload"]' },
+      // 09.11.2026 gerçek sayfa: eski sınıf seçicisi 0 öğe; ek kartı MessageAttachmentsFile / MessageAttachmentsImage (2.5.0)
+      { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: '[data-testid="file-thumbnail"], [data-cds="MessageAttachmentsFile"], [data-cds="MessageAttachmentsImage"]' },
       { id: 'yazma', bolge: 'yazma', ad: 'Yazma alanı', secici: '.ProseMirror' },
       { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"], button[data-testid*="model-selector"]' },
       { id: 'pencere', bolge: 'acilir', ad: 'Açılır pencere', secici: '[role="dialog"]' },
       { id: 'menu', bolge: 'acilir', ad: 'Açılır menü', secici: '[role="menu"]' },
     ],
   }];
+  // El yapımı haritası olmayan site: otomatik harita (renk ölçümü) + genel harita (anlamsal etiket) (0026 3b)
   const GENEL_PROFIL = {
-    ad: SITE, eslesir: () => true, gozTemasi: false,
-    bolgeler: [{ id: 'sayfa', ad: 'Sayfa geneli', kok: null }, { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"]' }],
-    oncelik: ['acilir'],
+    ad: SITE, eslesir: () => true, gozTemasi: true, otoHarita: true,
+    bolgeler: [
+      { id: 'sayfa', ad: 'Sayfa geneli', kok: null },
+      { id: 'oto', ad: 'Otomatik harita', kok: null },
+      { id: 'yapi', ad: 'Sayfa yapısı', kok: 'header, nav, aside, footer, main' },
+      { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"]' },
+    ],
+    oncelik: ['acilir', 'yapi'],
     nesneler: [
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
+      { id: 'oto-ana', bolge: 'oto', ad: 'Sayfa rengindeki zeminler', secici: '[data-st-z="ana"]' },
+      { id: 'oto-koyu', bolge: 'oto', ad: 'Geniş paneller', secici: '[data-st-z="koyu"]' },
+      { id: 'oto-kutu', bolge: 'oto', ad: 'Kutular', secici: '[data-st-z="kutu"]' },
+      { id: 'oto-vurgu', bolge: 'oto', ad: 'Renkli vurgular', secici: '[data-st-z="vurgu"]' },
+      { id: 'oto-yazi', bolge: 'oto', ad: 'Ana yazı', secici: '[data-st-y="ana"]' },
+      { id: 'oto-soluk', bolge: 'oto', ad: 'Soluk yazı', secici: '[data-st-y="soluk"]' },
+      { id: 'oto-link', bolge: 'oto', ad: 'Metin içi bağlantılar', secici: '[data-st-y="link"]' },
+      { id: 'oto-cerceve', bolge: 'oto', ad: 'Çerçeveli öğeler', secici: '[data-st-c]' },
+      { id: 'ust', bolge: 'yapi', ad: 'Üst çubuk', secici: 'header, [role="banner"]' },
+      { id: 'kenar', bolge: 'yapi', ad: 'Kenar menüsü', secici: 'nav, aside, [role="navigation"]' },
+      { id: 'ana', bolge: 'yapi', ad: 'Ana içerik', secici: 'main, [role="main"]' },
+      { id: 'yazma', bolge: 'yapi', ad: 'Yazma alanları', secici: 'input, textarea, [contenteditable="true"]' },
+      { id: 'kodblok', bolge: 'yapi', ad: 'Kod bloğu', secici: 'pre' },
+      { id: 'pencere', bolge: 'acilir', ad: 'Açılır pencere', secici: '[role="dialog"], dialog' },
+      { id: 'menu', bolge: 'acilir', ad: 'Açılır menü', secici: '[role="menu"], [role="listbox"]' },
     ],
   };
   const PROFIL = PROFILLER.find(p => p.eslesir(SITE)) || GENEL_PROFIL;
@@ -1029,7 +1265,9 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
     let css = YERLESIM_CSS;
     if (t.temel === 'goz' && PROFIL.gozTemasi) {
       const kok = Object.entries(t.degerler).map(([ad, deger]) => `  ${ad}: ${deger};`).join('\n');
-      css += `:root {\n${kok}\n}\n${KURALLAR}\n`;
+      // Otomatik haritalı sitede genel kurallar; sayfa denetimleri zemin açıklığına göre koyu/açık çizilir
+      const sema = PROFIL.otoHarita ? `  color-scheme: ${renkIsigi(t.degerler['--zemin-ana']) < 0.4 ? 'dark' : 'light'} !important;\n` : '';
+      css += `:root {\n${kok}\n${sema}}\n${PROFIL.otoHarita ? GENEL_KURALLAR : KURALLAR}\n`;
     }
     for (const n of tumNesneler()) {
       if (n.tur !== 'oge' || !n.secici) continue;
@@ -1085,10 +1323,25 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
   }
   let uygulaBekliyor = false;
   function uygula(hemen) {
-    if (hemen) { cssYaz(cssUret()); return; }
+    if (hemen) { cssYaz(cssUret()); haritaDurt(); return; }
     if (uygulaBekliyor) return;
     uygulaBekliyor = true;
-    requestAnimationFrame(() => { uygulaBekliyor = false; cssYaz(cssUret()); });
+    requestAnimationFrame(() => { uygulaBekliyor = false; cssYaz(cssUret()); haritaDurt(); });
+  }
+  // Tema Orijinal'den göze dönünce ölçülmemiş öğeler ölçülür
+  let harita = null, haritaEtkindi = false;
+  function haritaDurt() {
+    if (!harita) return;
+    const e = aktif().temel === 'goz';
+    if (e && !haritaEtkindi) harita.hepsi();
+    haritaEtkindi = e;
+  }
+  function renkIsigi(h) {
+    const m = /^#?([0-9a-f]{6})/i.exec(String(h || ''));
+    if (!m) return 0;
+    const k = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const n = parseInt(m[1], 16);
+    return 0.2126 * k(n >> 16) + 0.7152 * k((n >> 8) & 255) + 0.0722 * k(n & 255);
   }
   function kokHazir(fn) {
     if (document.documentElement) return fn();
@@ -1103,6 +1356,16 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
       if (stil.yol === '<style>' && stil.el && !stil.el.isConnected) (document.head || document.documentElement).append(stil.el);
     }).observe(document.documentElement, { childList: true, subtree: true });
   });
+
+  if (PROFIL.otoHarita) {
+    harita = otoHaritaKur({
+      atla: e => e.tagName === 'ST-KOK',
+      stilKapat: b => { if (stil.sayfa) stil.sayfa.disabled = b; else if (stil.el && stil.el.sheet) stil.el.sheet.disabled = b; },
+      etkin: () => aktif().temel === 'goz',
+    });
+    haritaEtkindi = aktif().temel === 'goz';
+    kokHazir(() => harita.baslat());
+  }
 
   /* ================================================================
      GEÇMİŞ — son 50 adım, sayfa yenilense de kalır (0016)
@@ -1916,11 +2179,17 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     } else if (oz.tur === 'anahtar') {
       alan.append(dug(v ? 'Gizli' : 'Görünür', 'Gizle / göster', () => yazHepsi(v ? null : true, true), 'anahtar' + (v ? ' s' : '')));
     } else if (oz.tur === 'font') {
-      const b = dug(v || '— temadan —', 'Yazı tipi seç · ↑ ↓ sıradaki yazı tipi (liste açılmadan), PageUp/PageDown 10, Home/End', () => fontAc(v, ad => yazHepsi(ad, true)), 'font-dugme');
+      // Listeden seçimde ayar alanı yeniden çizilir; odak yeni yazı tipi düğmesine döner (2.4.1)
+      let gezilen = v || null;
+      const listedenSec = ad => {
+        yazHepsi(ad, true);
+        const yeni = ayarEl.querySelector(`[data-odak="${CSS.escape(ozId + ':f')}"]`);
+        if (yeni) yeni.focus({ preventScroll: true });
+      };
+      const b = dug(v || '— temadan —', 'Yazı tipi seç · ↑ ↓ sıradaki yazı tipi (liste açılmadan), PageUp/PageDown 10, Home/End', () => fontAc(gezilen, listedenSec), 'font-dugme');
       if (v) b.style.fontFamily = aileYigini(v);
       b.dataset.odak = ozId + ':f';
       // Liste kapalıyken ok tuşlarıyla yazı tiplerinde gezinme; tuş bırakılınca geçmişe tek adım (2.3.0)
-      let gezilen = v || null;
       tus(b, 'keydown', e => {
         const adim = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10, Home: -1e6, End: 1e6 }[e.key];
         if (!adim) return;
@@ -1931,6 +2200,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         b.textContent = gezilen || '— temadan —';
         b.style.fontFamily = gezilen ? aileYigini(gezilen) : '';
         yazHepsi(gezilen, false);
+        // Liste açıksa işaret gezilen yazı tipine yürür (2.4.1)
+        fontIsaretle(gezilen);
       });
       tus(b, 'keyup', e => {
         if (!/^(Arrow|Page|Home|End)/.test(e.key)) return;
@@ -1980,6 +2251,13 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if ((n || taslakSayisi(depo.tema)) && hazirMi(depo.tema)) oge('Fabrika ayarına dön', temaSifirla);
     if (depo.tema !== 'Orijinal') oge('Temayı listeden kaldır', temaSil);
     if (depo.pal.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.pal.silinen = []; palKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
+    oge(`${SITE} için Site Tema'yı kapat (sayfa yenilenir)`, siteKapat, '', 'Tampermonkey menüsündeki "Site Tema: … için aç" ile geri açılır');
+    if (harita) {
+      bas('OTOMATİK HARİTA (0026)');
+      const oz = harita.ozet();
+      o.push(el('div', 'bilgi', `${Object.entries(oz.roller).map(([k, v]) => k + ' ' + v).join(' · ') || 'işaret yok'} · ${oz.tur} tur, ${oz.oge} öğe, son tur ${oz.sonSure} ms`));
+      oge('Haritayı yeniden ölç (sayfanın kendi teması değiştiyse)', () => { harita.yenile(); setTimeout(menuCiz, 900); bildir('Harita yeniden ölçülüyor'); });
+    }
     bas('PANEL TEMASI');
     for (const ad of Object.keys(PANEL_TEMALARI)) {
       const b = oge(ad, () => { depo.panelTema = ad; panelKaydet(); panelRenkUygula(); anlik('Panel teması: ' + ad); menuCiz(); hepsiniCiz(); }, ad === depo.panelTema ? 'secili' : '');
@@ -2023,8 +2301,26 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     return tumFontlar().filter(f => (depo.fontSuzgec === 'hepsi' || (depo.fontSuzgec === 'astigmat' ? f.astigmat : f.tur === depo.fontSuzgec))
       && (!a || f.ad.toLocaleLowerCase('tr').includes(a)) && (f.kaynak !== 'sistem' || sistemdeVar(f.ad)));
   }
+  // Açık yazı tipi listesinde ✓ işaretli satır; ok tuşuyla gezinince yürür ve görünür kalır (2.4.1)
+  let fontIsaretAd = null;
+  function fontIsaretle(ad) {
+    fontIsaretAd = ad || null;
+    if (durum.acilir !== 'font' || !acilirEl) return;
+    let hedef = null;
+    for (const o of acilirEl.querySelectorAll('.font-liste .oge')) {
+      const bu = (o.dataset.ad || null) === fontIsaretAd;
+      o.classList.toggle('secili', bu);
+      if (bu) hedef = o;
+    }
+    if (!hedef) return;
+    // scrollIntoView sayfayı da kaydırabilir; yalnız açılır kutu kaydırılır
+    const k = acilirEl.getBoundingClientRect(), h = hedef.getBoundingClientRect();
+    if (h.top < k.top) acilirEl.scrollTop -= k.top - h.top + 4;
+    else if (h.bottom > k.bottom) acilirEl.scrollTop += h.bottom - k.bottom + 4;
+  }
   function fontAc(secili, sec) {
     durum.acilir = 'font';
+    fontIsaretAd = secili || null;
     acilirEl.classList.add('acik');
     cubukBoya();
     const ciz = () => {
@@ -2068,9 +2364,9 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       }, { root: acilirEl }) : null;
       function listeCiz() {
         const fl = suzulmusFontlar();
-        const ogeler = [dug('— temadan —', '', () => { sec(null); acilirKapat(); }, 'oge' + (!secili ? ' secili' : ''))];
+        const ogeler = [dug('— temadan —', '', () => { acilirKapat(); sec(null); }, 'oge' + (!fontIsaretAd ? ' secili' : ''))];
         for (const f of fl.slice(0, 260)) {
-          const b = dug('', f.ad, () => { sec(f.ad); acilirKapat(); }, 'oge' + (f.ad === secili ? ' secili' : ''));
+          const b = dug('', f.ad, () => { acilirKapat(); sec(f.ad); }, 'oge' + (f.ad === fontIsaretAd ? ' secili' : ''));
           b.append(document.createTextNode(f.ad), el('small', '', (f.astigmat ? 'astigmat · ' : '') + (f.kaynak === 'sistem' ? 'cihazda' : f.kaynak)));
           b.style.fontFamily = `"stOn ${f.ad}", "${f.ad}", ${YEDEK_AILE[f.tur] || 'sans-serif'}`;
           b.dataset.ad = f.ad;
@@ -2080,9 +2376,13 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         liste.replaceChildren(...ogeler);
       }
       listeCiz();
+      fontIsaretle(fontIsaretAd);
     };
     ciz();
   }
+
+  // Bu sitede kapalı: kayıt yazılır, sayfa temasız yeniden açılır (0026 3b)
+  function siteKapat() { yaz(SK('kapali'), true); location.reload(); }
 
   /* ---------------- tema işleri ---------------- */
   function benzersizAd(ad) {
@@ -3137,6 +3437,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   // Tampermonkey menüsü
   GM_registerMenuCommand('Site Tema paneli (' + KISAYOL + ')', () => paneliAc(!depo.acik));
   GM_registerMenuCommand('Sayfayı tara', () => tara());
+  GM_registerMenuCommand(`Site Tema: ${SITE} için kapat`, () => siteKapat());
   if (PROFIL.ad === 'claude.ai') GM_registerMenuCommand('Model penceresi aç/kapat', () => modelPencereAyarla(!depo.modelPencere));
   for (const ad of temaAdlari()) GM_registerMenuCommand('Tema: ' + ad, () => temaDegistir(ad));
 })();

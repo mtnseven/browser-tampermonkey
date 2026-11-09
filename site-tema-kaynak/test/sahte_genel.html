@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Örnek açık site (otomatik harita testi)</title>
+<style>
+  body { margin: 0; background: #ffffff; color: #111111; font: 16px sans-serif; }
+  #ust { height: 60px; background: #eeeeee; color: #111111; }
+  #yan { position: fixed; left: 0; top: 60px; bottom: 0; width: 220px; background: #f2f2f2; }
+  #icerik { margin-left: 240px; padding: 12px; }
+  #ayni { background: #ffffff; padding: 8px; }
+  #kart { width: 200px; background: #f7f7f7; padding: 6px; }
+  #okl { width: 120px; height: 40px; background: oklch(0.9 0 0); }
+  #vurgu { background: #1a73e8; color: #ffffff; border: 0; padding: 6px 12px; }
+  #soluk { color: #888888; }
+  #cerceveli { border: 1px solid #cccccc; padding: 6px; }
+  #seffaf { border: 2px solid transparent; }
+  pre { background: #f6f8fa; color: #24292f; }
+  .ph::before { content: attr(data-placeholder); color: #aaaaaa; }
+</style>
+</head>
+<body>
+<div id="ust"><span id="ustyazi">Örnek site</span></div>
+<div id="yan"><a id="menulink" href="#">Menü bağlantısı</a></div>
+<div id="icerik">
+  <p id="ana">Ana metin. <a id="satirlink" href="#">satır içi bağlantı</a> burada.</p>
+  <p id="soluk">İkincil soluk metin</p>
+  <div id="ayni">Sayfayla aynı zemin</div>
+  <div id="kart">Küçük kart</div>
+  <div id="okl">oklch</div>
+  <button id="vurgu">Gönder</button>
+  <div id="cerceveli">Çerçeveli kutu</div>
+  <div id="seffaf">Saydam çerçeve</div>
+  <pre id="kod"><code><span id="tok" style="color:#cf222e">const</span> a = 1;</code></pre>
+  <input id="girdi" placeholder="Yazın">
+  <div contenteditable="true" id="duzen"><p class="ph" data-placeholder="Bir şey yazın"></p></div>
+</div>
+<script>
+  setTimeout(() => {
+    const d = document.createElement('div');
+    d.id = 'sonradan'; d.style.cssText = 'width:150px;background:#f7f7f7;color:#111111';
+    d.textContent = 'Sonradan gelen kart';
+    document.getElementById('icerik').append(d);
+  }, 900);
+</script>
+</body>
+</html>

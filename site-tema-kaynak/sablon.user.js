@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.4.0
-// @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
-// @match        https://claude.ai/*
+// @version      2.5.0
+// @description  Bütün sitelere göz teması ve canlı ayar paneli (claude.ai el yapımı harita, öteki siteler otomatik harita); claude.ai model seçicisi tek pencerede
+// @match        *://*/*
 // @run-at       document-start
 // @noframes
 // @updateURL    https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js
@@ -23,10 +23,15 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.4.0';
+  const SURUM = '2.5.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
+  // Bu sitede kapalıysa hiçbir şey kurulmaz; yalnız açma komutu kalır (0026 3b)
+  if (GM_getValue(SITE + ':kapali', false)) {
+    GM_registerMenuCommand(`Site Tema: ${SITE} için aç`, () => { GM_setValue(SITE + ':kapali', false); location.reload(); });
+    return;
+  }
 
   /* ================================================================
      KALICI AYAR — Metin'in onayladığı varsayılanlar, site başına (0004).
@@ -48,6 +53,8 @@
 `;
 
   const VARSAYILAN_DEGER = Object.fromEntries(DEGISKENLER.map(d => [d.ad, d.deger]));
+
+/*@OTO_HARITA@*/
 
   /* ================================================================
      HAZIR SAYFA TEMALARI — Göz temasının kurallarını kullanır, yalnız
@@ -121,7 +128,8 @@
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
-      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[class*="bg-accent"], [data-cds="Badge"]' },
+      // 09.11.2026 gerçek sayfa: [class*="bg-accent"] 58 düğmenin basılı-durum katmanını tutuyordu; rozet yalnız Badge (2.5.0)
+      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[data-cds="Badge"]' },
       { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'aside.dframe-sidebar, nav.h-screen' },
       { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: '.dframe-sidebar .hit-row, ul.flex.flex-col.gap-px li a' },
       { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: '[data-testid="chat-header"], header' },
@@ -131,21 +139,43 @@
       { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '[data-testid="assistant-message"] .prose, .font-claude-response, .font-claude-response-body, .font-claude-message' },
       { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: ':is(.prose, .standard-markdown) code:not(pre code), .font-claude-response code, .font-claude-response-body code' },
       { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: '.epitaxy-codeblock, div:has(> pre.code-block__code), pre, .code-block__code' },
-      { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: 'div[class*="attachment"], div[class*="file-upload"]' },
+      // 09.11.2026 gerçek sayfa: eski sınıf seçicisi 0 öğe; ek kartı MessageAttachmentsFile / MessageAttachmentsImage (2.5.0)
+      { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: '[data-testid="file-thumbnail"], [data-cds="MessageAttachmentsFile"], [data-cds="MessageAttachmentsImage"]' },
       { id: 'yazma', bolge: 'yazma', ad: 'Yazma alanı', secici: '.ProseMirror' },
       { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"], button[data-testid*="model-selector"]' },
       { id: 'pencere', bolge: 'acilir', ad: 'Açılır pencere', secici: '[role="dialog"]' },
       { id: 'menu', bolge: 'acilir', ad: 'Açılır menü', secici: '[role="menu"]' },
     ],
   }];
+  // El yapımı haritası olmayan site: otomatik harita (renk ölçümü) + genel harita (anlamsal etiket) (0026 3b)
   const GENEL_PROFIL = {
-    ad: SITE, eslesir: () => true, gozTemasi: false,
-    bolgeler: [{ id: 'sayfa', ad: 'Sayfa geneli', kok: null }, { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"]' }],
-    oncelik: ['acilir'],
+    ad: SITE, eslesir: () => true, gozTemasi: true, otoHarita: true,
+    bolgeler: [
+      { id: 'sayfa', ad: 'Sayfa geneli', kok: null },
+      { id: 'oto', ad: 'Otomatik harita', kok: null },
+      { id: 'yapi', ad: 'Sayfa yapısı', kok: 'header, nav, aside, footer, main' },
+      { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"]' },
+    ],
+    oncelik: ['acilir', 'yapi'],
     nesneler: [
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
+      { id: 'oto-ana', bolge: 'oto', ad: 'Sayfa rengindeki zeminler', secici: '[data-st-z="ana"]' },
+      { id: 'oto-koyu', bolge: 'oto', ad: 'Geniş paneller', secici: '[data-st-z="koyu"]' },
+      { id: 'oto-kutu', bolge: 'oto', ad: 'Kutular', secici: '[data-st-z="kutu"]' },
+      { id: 'oto-vurgu', bolge: 'oto', ad: 'Renkli vurgular', secici: '[data-st-z="vurgu"]' },
+      { id: 'oto-yazi', bolge: 'oto', ad: 'Ana yazı', secici: '[data-st-y="ana"]' },
+      { id: 'oto-soluk', bolge: 'oto', ad: 'Soluk yazı', secici: '[data-st-y="soluk"]' },
+      { id: 'oto-link', bolge: 'oto', ad: 'Metin içi bağlantılar', secici: '[data-st-y="link"]' },
+      { id: 'oto-cerceve', bolge: 'oto', ad: 'Çerçeveli öğeler', secici: '[data-st-c]' },
+      { id: 'ust', bolge: 'yapi', ad: 'Üst çubuk', secici: 'header, [role="banner"]' },
+      { id: 'kenar', bolge: 'yapi', ad: 'Kenar menüsü', secici: 'nav, aside, [role="navigation"]' },
+      { id: 'ana', bolge: 'yapi', ad: 'Ana içerik', secici: 'main, [role="main"]' },
+      { id: 'yazma', bolge: 'yapi', ad: 'Yazma alanları', secici: 'input, textarea, [contenteditable="true"]' },
+      { id: 'kodblok', bolge: 'yapi', ad: 'Kod bloğu', secici: 'pre' },
+      { id: 'pencere', bolge: 'acilir', ad: 'Açılır pencere', secici: '[role="dialog"], dialog' },
+      { id: 'menu', bolge: 'acilir', ad: 'Açılır menü', secici: '[role="menu"], [role="listbox"]' },
     ],
   };
   const PROFIL = PROFILLER.find(p => p.eslesir(SITE)) || GENEL_PROFIL;
@@ -512,7 +542,9 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
     let css = YERLESIM_CSS;
     if (t.temel === 'goz' && PROFIL.gozTemasi) {
       const kok = Object.entries(t.degerler).map(([ad, deger]) => `  ${ad}: ${deger};`).join('\n');
-      css += `:root {\n${kok}\n}\n${KURALLAR}\n`;
+      // Otomatik haritalı sitede genel kurallar; sayfa denetimleri zemin açıklığına göre koyu/açık çizilir
+      const sema = PROFIL.otoHarita ? `  color-scheme: ${renkIsigi(t.degerler['--zemin-ana']) < 0.4 ? 'dark' : 'light'} !important;\n` : '';
+      css += `:root {\n${kok}\n${sema}}\n${PROFIL.otoHarita ? GENEL_KURALLAR : KURALLAR}\n`;
     }
     for (const n of tumNesneler()) {
       if (n.tur !== 'oge' || !n.secici) continue;
@@ -568,10 +600,25 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
   }
   let uygulaBekliyor = false;
   function uygula(hemen) {
-    if (hemen) { cssYaz(cssUret()); return; }
+    if (hemen) { cssYaz(cssUret()); haritaDurt(); return; }
     if (uygulaBekliyor) return;
     uygulaBekliyor = true;
-    requestAnimationFrame(() => { uygulaBekliyor = false; cssYaz(cssUret()); });
+    requestAnimationFrame(() => { uygulaBekliyor = false; cssYaz(cssUret()); haritaDurt(); });
+  }
+  // Tema Orijinal'den göze dönünce ölçülmemiş öğeler ölçülür
+  let harita = null, haritaEtkindi = false;
+  function haritaDurt() {
+    if (!harita) return;
+    const e = aktif().temel === 'goz';
+    if (e && !haritaEtkindi) harita.hepsi();
+    haritaEtkindi = e;
+  }
+  function renkIsigi(h) {
+    const m = /^#?([0-9a-f]{6})/i.exec(String(h || ''));
+    if (!m) return 0;
+    const k = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const n = parseInt(m[1], 16);
+    return 0.2126 * k(n >> 16) + 0.7152 * k((n >> 8) & 255) + 0.0722 * k(n & 255);
   }
   function kokHazir(fn) {
     if (document.documentElement) return fn();
@@ -586,6 +633,16 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
       if (stil.yol === '<style>' && stil.el && !stil.el.isConnected) (document.head || document.documentElement).append(stil.el);
     }).observe(document.documentElement, { childList: true, subtree: true });
   });
+
+  if (PROFIL.otoHarita) {
+    harita = otoHaritaKur({
+      atla: e => e.tagName === 'ST-KOK',
+      stilKapat: b => { if (stil.sayfa) stil.sayfa.disabled = b; else if (stil.el && stil.el.sheet) stil.el.sheet.disabled = b; },
+      etkin: () => aktif().temel === 'goz',
+    });
+    haritaEtkindi = aktif().temel === 'goz';
+    kokHazir(() => harita.baslat());
+  }
 
   /* ================================================================
      GEÇMİŞ — son 50 adım, sayfa yenilense de kalır (0016)
@@ -1399,11 +1456,17 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     } else if (oz.tur === 'anahtar') {
       alan.append(dug(v ? 'Gizli' : 'Görünür', 'Gizle / göster', () => yazHepsi(v ? null : true, true), 'anahtar' + (v ? ' s' : '')));
     } else if (oz.tur === 'font') {
-      const b = dug(v || '— temadan —', 'Yazı tipi seç · ↑ ↓ sıradaki yazı tipi (liste açılmadan), PageUp/PageDown 10, Home/End', () => fontAc(v, ad => yazHepsi(ad, true)), 'font-dugme');
+      // Listeden seçimde ayar alanı yeniden çizilir; odak yeni yazı tipi düğmesine döner (2.4.1)
+      let gezilen = v || null;
+      const listedenSec = ad => {
+        yazHepsi(ad, true);
+        const yeni = ayarEl.querySelector(`[data-odak="${CSS.escape(ozId + ':f')}"]`);
+        if (yeni) yeni.focus({ preventScroll: true });
+      };
+      const b = dug(v || '— temadan —', 'Yazı tipi seç · ↑ ↓ sıradaki yazı tipi (liste açılmadan), PageUp/PageDown 10, Home/End', () => fontAc(gezilen, listedenSec), 'font-dugme');
       if (v) b.style.fontFamily = aileYigini(v);
       b.dataset.odak = ozId + ':f';
       // Liste kapalıyken ok tuşlarıyla yazı tiplerinde gezinme; tuş bırakılınca geçmişe tek adım (2.3.0)
-      let gezilen = v || null;
       tus(b, 'keydown', e => {
         const adim = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10, Home: -1e6, End: 1e6 }[e.key];
         if (!adim) return;
@@ -1414,6 +1477,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         b.textContent = gezilen || '— temadan —';
         b.style.fontFamily = gezilen ? aileYigini(gezilen) : '';
         yazHepsi(gezilen, false);
+        // Liste açıksa işaret gezilen yazı tipine yürür (2.4.1)
+        fontIsaretle(gezilen);
       });
       tus(b, 'keyup', e => {
         if (!/^(Arrow|Page|Home|End)/.test(e.key)) return;
@@ -1463,6 +1528,13 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if ((n || taslakSayisi(depo.tema)) && hazirMi(depo.tema)) oge('Fabrika ayarına dön', temaSifirla);
     if (depo.tema !== 'Orijinal') oge('Temayı listeden kaldır', temaSil);
     if (depo.pal.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.pal.silinen = []; palKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
+    oge(`${SITE} için Site Tema'yı kapat (sayfa yenilenir)`, siteKapat, '', 'Tampermonkey menüsündeki "Site Tema: … için aç" ile geri açılır');
+    if (harita) {
+      bas('OTOMATİK HARİTA (0026)');
+      const oz = harita.ozet();
+      o.push(el('div', 'bilgi', `${Object.entries(oz.roller).map(([k, v]) => k + ' ' + v).join(' · ') || 'işaret yok'} · ${oz.tur} tur, ${oz.oge} öğe, son tur ${oz.sonSure} ms`));
+      oge('Haritayı yeniden ölç (sayfanın kendi teması değiştiyse)', () => { harita.yenile(); setTimeout(menuCiz, 900); bildir('Harita yeniden ölçülüyor'); });
+    }
     bas('PANEL TEMASI');
     for (const ad of Object.keys(PANEL_TEMALARI)) {
       const b = oge(ad, () => { depo.panelTema = ad; panelKaydet(); panelRenkUygula(); anlik('Panel teması: ' + ad); menuCiz(); hepsiniCiz(); }, ad === depo.panelTema ? 'secili' : '');
@@ -1506,8 +1578,26 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     return tumFontlar().filter(f => (depo.fontSuzgec === 'hepsi' || (depo.fontSuzgec === 'astigmat' ? f.astigmat : f.tur === depo.fontSuzgec))
       && (!a || f.ad.toLocaleLowerCase('tr').includes(a)) && (f.kaynak !== 'sistem' || sistemdeVar(f.ad)));
   }
+  // Açık yazı tipi listesinde ✓ işaretli satır; ok tuşuyla gezinince yürür ve görünür kalır (2.4.1)
+  let fontIsaretAd = null;
+  function fontIsaretle(ad) {
+    fontIsaretAd = ad || null;
+    if (durum.acilir !== 'font' || !acilirEl) return;
+    let hedef = null;
+    for (const o of acilirEl.querySelectorAll('.font-liste .oge')) {
+      const bu = (o.dataset.ad || null) === fontIsaretAd;
+      o.classList.toggle('secili', bu);
+      if (bu) hedef = o;
+    }
+    if (!hedef) return;
+    // scrollIntoView sayfayı da kaydırabilir; yalnız açılır kutu kaydırılır
+    const k = acilirEl.getBoundingClientRect(), h = hedef.getBoundingClientRect();
+    if (h.top < k.top) acilirEl.scrollTop -= k.top - h.top + 4;
+    else if (h.bottom > k.bottom) acilirEl.scrollTop += h.bottom - k.bottom + 4;
+  }
   function fontAc(secili, sec) {
     durum.acilir = 'font';
+    fontIsaretAd = secili || null;
     acilirEl.classList.add('acik');
     cubukBoya();
     const ciz = () => {
@@ -1551,9 +1641,9 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       }, { root: acilirEl }) : null;
       function listeCiz() {
         const fl = suzulmusFontlar();
-        const ogeler = [dug('— temadan —', '', () => { sec(null); acilirKapat(); }, 'oge' + (!secili ? ' secili' : ''))];
+        const ogeler = [dug('— temadan —', '', () => { acilirKapat(); sec(null); }, 'oge' + (!fontIsaretAd ? ' secili' : ''))];
         for (const f of fl.slice(0, 260)) {
-          const b = dug('', f.ad, () => { sec(f.ad); acilirKapat(); }, 'oge' + (f.ad === secili ? ' secili' : ''));
+          const b = dug('', f.ad, () => { acilirKapat(); sec(f.ad); }, 'oge' + (f.ad === fontIsaretAd ? ' secili' : ''));
           b.append(document.createTextNode(f.ad), el('small', '', (f.astigmat ? 'astigmat · ' : '') + (f.kaynak === 'sistem' ? 'cihazda' : f.kaynak)));
           b.style.fontFamily = `"stOn ${f.ad}", "${f.ad}", ${YEDEK_AILE[f.tur] || 'sans-serif'}`;
           b.dataset.ad = f.ad;
@@ -1563,9 +1653,13 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         liste.replaceChildren(...ogeler);
       }
       listeCiz();
+      fontIsaretle(fontIsaretAd);
     };
     ciz();
   }
+
+  // Bu sitede kapalı: kayıt yazılır, sayfa temasız yeniden açılır (0026 3b)
+  function siteKapat() { yaz(SK('kapali'), true); location.reload(); }
 
   /* ---------------- tema işleri ---------------- */
   function benzersizAd(ad) {
@@ -2620,6 +2714,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   // Tampermonkey menüsü
   GM_registerMenuCommand('Site Tema paneli (' + KISAYOL + ')', () => paneliAc(!depo.acik));
   GM_registerMenuCommand('Sayfayı tara', () => tara());
+  GM_registerMenuCommand(`Site Tema: ${SITE} için kapat`, () => siteKapat());
   if (PROFIL.ad === 'claude.ai') GM_registerMenuCommand('Model penceresi aç/kapat', () => modelPencereAyarla(!depo.modelPencere));
   for (const ad of temaAdlari()) GM_registerMenuCommand('Tema: ' + ad, () => temaDegistir(ad));
 })();
