@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.3.0
+// @version      2.4.0
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -14,6 +14,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
 // @grant        GM_addValueChangeListener
+// @grant        GM_listValues
 // @connect      fonts.googleapis.com
 // @connect      fonts.gstatic.com
 // @connect      *
@@ -22,15 +23,16 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.3.0';
+  const SURUM = '2.4.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
 
   /* ================================================================
      KALICI AYAR — Metin'in onayladığı varsayılanlar, site başına (0004).
-     Paneldeki ☰ → "Panoya kopyala" / "Dosyaya kaydet" çıktısının
-     "kalici" kısmı buraya yazılır, @version artırılır.
+     Paneldeki ☰ → "Tümünü dosyaya kaydet" yedeğinden "paletler"
+     (renkler, bütün siteler) ve "<site>:kullanici" (nesne ayarı) buraya
+     temalar[ad].degerler / .nesneler olarak yazılır, @version artırılır.
      ================================================================ */
   const KALICI = {
     'claude.ai': { temalar: {}, ozelNesneler: [], fontlar: [] },
@@ -208,7 +210,10 @@
 
   const depo = {
     kul: oku(SK('kullanici'), null),
-    tema: oku(SK('tema'), PROFIL.gozTemasi ? 'Göz' : 'Orijinal'),
+    tema: null,
+    // Palet bütün sitelerde ortak (paletSecili); siteTema yalnız bu sitede başka palet (2.4.0)
+    siteTema: oku(SK('siteTema'), null),
+    pal: oku('paletler', null),
     acik: oku('panelAcik', false),
     genislik: oku('panelGenislik', 380),
     panelTema: oku('panelTema', 'Gece'),
@@ -235,6 +240,45 @@
     return k;
   }
   depo.kul = kulDuzelt(depo.kul);
+  // Palet: siteden bağımsız renk değerleri ve yazı tipleri (2.4.0). Nesne ayarı sitede kalır.
+  function palDuzelt(p) {
+    p = p && typeof p === 'object' ? p : {};
+    p.temalar = p.temalar && typeof p.temalar === 'object' ? p.temalar : {};
+    p.taslaklar = p.taslaklar && typeof p.taslaklar === 'object' ? p.taslaklar : {};
+    p.silinen = Array.isArray(p.silinen) ? p.silinen : [];
+    p.fontlar = Array.isArray(p.fontlar) ? p.fontlar : [];
+    return p;
+  }
+  const tumAnahtarlar = () => { try { return typeof GM_listValues === 'function' ? GM_listValues() : []; } catch (e) { return []; } };
+  // Göç (2.4.0 öncesi): her sitenin temasındaki renk değerleri ortak palete taşınır, nesne ayarı sitede kalır
+  if (depo.pal === null) {
+    const p = palDuzelt(null);
+    const anahtarlar = tumAnahtarlar().filter(a => /:kullanici$/.test(a));
+    if (!anahtarlar.includes(SK('kullanici'))) anahtarlar.push(SK('kullanici'));
+    for (const a of anahtarlar) {
+      const k = a === SK('kullanici') ? depo.kul : kulDuzelt(oku(a, null));
+      for (const [kaynak, hedef] of [[k.temalar, p.temalar], [k.taslaklar, p.taslaklar]]) {
+        for (const [ad, t] of Object.entries(kaynak)) {
+          if (ad === 'Orijinal' || !t) continue;
+          const dolu = t.degerler && Object.keys(t.degerler).length;
+          if (dolu || t.temel || (kaynak === k.temalar && !HAZIR_TEMALAR[ad])) {
+            const h = hedef[ad] || (hedef[ad] = { degerler: {} });
+            Object.assign(h.degerler, t.degerler || {}); if (t.temel) h.temel = t.temel;
+          }
+          delete t.degerler; delete t.temel;
+        }
+      }
+      for (const x of k.silinen) if (!p.silinen.includes(x)) p.silinen.push(x);
+      for (const f of k.fontlar) if (!p.fontlar.some(o => o.ad === f.ad)) p.fontlar.push(f);
+      k.silinen = []; k.fontlar = [];
+      yaz(a, k);
+    }
+    const eski = oku(SK('tema'), null);
+    if (eski && oku('paletSecili', null) === null) yaz('paletSecili', eski);
+    depo.pal = p; yaz('paletler', p);
+  }
+  depo.pal = palDuzelt(depo.pal);
+  depo.tema = depo.siteTema || oku('paletSecili', null) || (PROFIL.gozTemasi ? 'Göz' : 'Orijinal');
   const durum = {
     secim: oku(SK('secim'), []),
     bolge: oku(SK('bolge'), 'sayfa'),
@@ -246,6 +290,7 @@
   const gecikmeli = {};
   function sonraYaz(k, f, ms) { clearTimeout(gecikmeli[k]); gecikmeli[k] = setTimeout(f, ms || 300); }
   const kulKaydet = () => sonraYaz('kul', () => yaz(SK('kullanici'), depo.kul));
+  const palKaydet = () => sonraYaz('pal', () => yaz('paletler', depo.pal));
   const panelKaydet = () => sonraYaz('panel', () => { yaz('panelTema', depo.panelTema); yaz('panelOzel', depo.panelOzel); });
   const secimKaydet = () => { yaz(SK('secim'), durum.secim); yaz(SK('bolge'), durum.bolge); };
   // Başka sekmede (sohbet, /code) yapılan değişiklik bu sekmeye yenilemeden gelir (2.2.2)
@@ -253,7 +298,9 @@
     const uzaktan = f => (k, eski, yeni, uzak) => { if (uzak && yeni !== undefined) f(yeni); };
     const yenile = () => { uygula(true); fontlariHazirla(); hepsiniCiz(); };
     GM_addValueChangeListener(SK('kullanici'), uzaktan(v => { depo.kul = kulDuzelt(v); yenile(); }));
-    GM_addValueChangeListener(SK('tema'), uzaktan(v => { depo.tema = v; yenile(); }));
+    GM_addValueChangeListener('paletler', uzaktan(v => { depo.pal = palDuzelt(v); yenile(); }));
+    GM_addValueChangeListener('paletSecili', uzaktan(v => { if (!depo.siteTema) { depo.tema = v; yenile(); } }));
+    GM_addValueChangeListener(SK('siteTema'), uzaktan(v => { depo.siteTema = v; depo.tema = v || oku('paletSecili', depo.tema); yenile(); }));
   }
 
   /* ================================================================
@@ -263,10 +310,10 @@
     const ad = [];
     if (PROFIL.gozTemasi) {
       for (const a of Object.keys(HAZIR_TEMALAR).concat(Object.keys(KS.temalar || {}))) {
-        if (!ad.includes(a) && !depo.kul.silinen.includes(a)) ad.push(a);
+        if (!ad.includes(a) && !depo.pal.silinen.includes(a)) ad.push(a);
       }
     }
-    for (const a of Object.keys(depo.kul.temalar)) if (!ad.includes(a) && a !== 'Orijinal' && !depo.kul.silinen.includes(a)) ad.push(a);
+    for (const a of Object.keys(depo.pal.temalar)) if (!ad.includes(a) && a !== 'Orijinal' && !depo.pal.silinen.includes(a)) ad.push(a);
     ad.push('Orijinal');
     return ad;
   }
@@ -276,11 +323,12 @@
     if (!temaAdlari().includes(ad)) ad = 'Orijinal';
     const h = ad === 'Orijinal' ? { temel: 'orijinal' } : (HAZIR_TEMALAR[ad] || {});
     const k = (KS.temalar || {})[ad] || {}, u = depo.kul.temalar[ad] || {}, ts = depo.kul.taslaklar[ad] || {};
-    let temel = ad === 'Orijinal' ? 'orijinal' : (ts.temel || u.temel || k.temel || h.temel || 'goz');
+    const pk = depo.pal.temalar[ad] || {}, pt = depo.pal.taslaklar[ad] || {};
+    let temel = ad === 'Orijinal' ? 'orijinal' : (pt.temel || pk.temel || k.temel || h.temel || 'goz');
     if (!PROFIL.gozTemasi) temel = 'orijinal';
     const taban = Object.assign({}, VARSAYILAN_DEGER, h.degerler || {}, k.degerler || {});
-    const degerler = Object.assign({}, taban, u.degerler || {});
-    for (const [p, v] of Object.entries(ts.degerler || {})) {
+    const degerler = Object.assign({}, taban, pk.degerler || {});
+    for (const [p, v] of Object.entries(pt.degerler || {})) {
       if (v !== null) degerler[p] = v; else if (p in taban) degerler[p] = taban[p]; else delete degerler[p];
     }
     const nesneTaban = {}, nesneler = {};
@@ -301,27 +349,41 @@
   }
   const aktif = () => tema(depo.tema);
 
+  // Taslak iki yerde: renk değerleri ortak palette, nesne ayarı bu sitede (2.4.0)
   function taslak(ad) {
     const t = depo.kul.taslaklar[ad] || (depo.kul.taslaklar[ad] = {});
-    t.degerler = t.degerler || {}; t.nesneler = t.nesneler || {};
+    t.nesneler = t.nesneler || {};
+    return t;
+  }
+  function palTaslak(ad) {
+    const t = depo.pal.taslaklar[ad] || (depo.pal.taslaklar[ad] = {});
+    t.degerler = t.degerler || {};
     return t;
   }
   // Kaydedilmemiş değişiklik sayısı (2.2.0)
   function taslakSayisi(ad) {
-    const t = depo.kul.taslaklar[ad];
-    if (!t) return 0;
-    return Object.keys(t.degerler || {}).length + Object.values(t.nesneler || {}).reduce((x, o) => x + Object.keys(o).length, 0) + (t.temel ? 1 : 0);
+    const t = depo.kul.taslaklar[ad] || {}, pt = depo.pal.taslaklar[ad] || {};
+    return Object.keys(pt.degerler || {}).length + (pt.temel ? 1 : 0) + Object.values(t.nesneler || {}).reduce((x, o) => x + Object.keys(o).length, 0);
+  }
+  function taslakTemizle(ad) {
+    const t = depo.kul.taslaklar[ad], pt = depo.pal.taslaklar[ad];
+    if (t && !Object.keys(t.nesneler || {}).length) delete depo.kul.taslaklar[ad];
+    if (pt && !Object.keys(pt.degerler || {}).length && !pt.temel) delete depo.pal.taslaklar[ad];
   }
   function kulTema(ad) {
     const u = depo.kul.temalar[ad] || (depo.kul.temalar[ad] = {});
-    u.degerler = u.degerler || {}; u.nesneler = u.nesneler || {};
+    u.nesneler = u.nesneler || {};
     return u;
+  }
+  function palTema(ad) {
+    const p = depo.pal.temalar[ad] || (depo.pal.temalar[ad] = {});
+    p.degerler = p.degerler || {};
+    return p;
   }
   // Betiğe işlenmemiş (yalnız bu cihazdaki) değişiklik sayısı (0013)
   function islenmemis(ad) {
-    const u = depo.kul.temalar[ad];
-    if (!u) return 0;
-    return Object.keys(u.degerler || {}).length + Object.values(u.nesneler || {}).reduce((t, o) => t + Object.keys(o).length, 0) + (hazirMi(ad) ? 0 : 1);
+    const u = depo.kul.temalar[ad] || {}, pk = depo.pal.temalar[ad];
+    return Object.keys((pk || {}).degerler || {}).length + Object.values(u.nesneler || {}).reduce((t, o) => t + Object.keys(o).length, 0) + (hazirMi(ad) || !pk ? 0 : 1);
   }
 
   function tumNesneler() {
@@ -362,10 +424,10 @@
   // Yalnız kullanıcının değiştirdiği (↺ ile geri alınabilen) değer var mı
   function kullaniciDegeriVar(n, oz) {
     if (n.tur === 'panel') return (depo.panelOzel[depo.panelTema] || {})[n.degisken] !== undefined;
-    const u = depo.kul.temalar[depo.tema] || {}, ts = depo.kul.taslaklar[depo.tema] || {};
+    const pk = depo.pal.temalar[depo.tema] || {}, pt = depo.pal.taslaklar[depo.tema] || {};
     if (n.tur === 'degisken' || n.tur === 'font') {
-      const d = (ts.degerler || {})[n.degisken];
-      return d !== undefined ? d !== null : (u.degerler || {})[n.degisken] !== undefined;
+      const d = (pt.degerler || {})[n.degisken];
+      return d !== undefined ? d !== null : (pk.degerler || {})[n.degisken] !== undefined;
     }
     return ozDeger(n, oz) !== undefined;
   }
@@ -393,20 +455,22 @@
       return;
     }
     // Değişiklik taslağa gider; kayıtlı tema Kaydet'e kadar değişmez (2.2.0)
-    const ts = taslak(depo.tema), u = depo.kul.temalar[depo.tema] || {};
+    const u = depo.kul.temalar[depo.tema] || {};
     if (n.tur === 'degisken' || n.tur === 'font') {
-      const kayitli = (u.degerler || {})[n.degisken] !== undefined;
-      if (bos) { if (kayitli) ts.degerler[n.degisken] = null; else delete ts.degerler[n.degisken]; }
-      else ts.degerler[n.degisken] = n.tur === 'font' ? aileYigini(v) : v;
+      const pt = palTaslak(depo.tema);
+      const kayitli = ((depo.pal.temalar[depo.tema] || {}).degerler || {})[n.degisken] !== undefined;
+      if (bos) { if (kayitli) pt.degerler[n.degisken] = null; else delete pt.degerler[n.degisken]; }
+      else pt.degerler[n.degisken] = n.tur === 'font' ? aileYigini(v) : v;
     } else {
+      const ts = taslak(depo.tema);
       const o = ts.nesneler[n.id] || (ts.nesneler[n.id] = {});
       const kayitli = ((u.nesneler || {})[n.id] || {})[oz] !== undefined;
       if (bos) { if (kayitli) o[oz] = null; else delete o[oz]; } else o[oz] = v;
       if (!Object.keys(o).length) delete ts.nesneler[n.id];
     }
-    if (!taslakSayisi(depo.tema)) delete depo.kul.taslaklar[depo.tema];
+    taslakTemizle(depo.tema);
     if (oz === 'aile' && !bos) fontHazirla(v);
-    kulKaydet(); uygula(); taslakCiz();
+    kulKaydet(); palKaydet(); uygula(); taslakCiz();
   }
 
   /* ================================================================
@@ -527,7 +591,7 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
      GEÇMİŞ — son 50 adım, sayfa yenilense de kalır (0016)
      ================================================================ */
   const gecmis = (() => { const g = oku(SK('gecmis'), null); return g && Array.isArray(g.liste) ? g : { liste: [], konum: -1 }; })();
-  const durumMetni = () => JSON.stringify({ kul: depo.kul, tema: depo.tema, panelTema: depo.panelTema, panelOzel: depo.panelOzel });
+  const durumMetni = () => JSON.stringify({ kul: depo.kul, pal: depo.pal, tema: depo.tema, siteTema: depo.siteTema, panelTema: depo.panelTema, panelOzel: depo.panelOzel });
   function anlik(etiket) {
     const s = durumMetni();
     const simdiki = gecmis.liste[gecmis.konum];
@@ -544,8 +608,10 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
     if (!g) return;
     const d = JSON.parse(g.s);
     depo.kul = kulDuzelt(d.kul); depo.tema = d.tema; depo.panelTema = d.panelTema || 'Gece'; depo.panelOzel = d.panelOzel || {};
+    if (d.pal) depo.pal = palDuzelt(d.pal);
+    depo.siteTema = d.siteTema || null;
     gecmis.konum = i;
-    yaz(SK('kullanici'), depo.kul); yaz(SK('tema'), depo.tema); yaz('panelTema', depo.panelTema); yaz('panelOzel', depo.panelOzel);
+    yaz(SK('kullanici'), depo.kul); yaz('paletler', depo.pal); yaz(SK('siteTema'), depo.siteTema); if (!depo.siteTema) yaz('paletSecili', depo.tema); yaz('panelTema', depo.panelTema); yaz('panelOzel', depo.panelOzel);
     yaz(SK('gecmis'), gecmis);
     uygula(true); panelRenkUygula(); hepsiniCiz();
   }
@@ -718,7 +784,7 @@ html.st-secim, html.st-secim * { cursor: crosshair !important; }
     });
   }
   function tumFontlar() {
-    const ek = depo.kul.fontlar.concat((KS.fontlar || []).filter(f => !depo.kul.fontlar.some(k => k.ad === f.ad)));
+    const ek = depo.pal.fontlar.concat((KS.fontlar || []).filter(f => !depo.pal.fontlar.some(k => k.ad === f.ad)));
     return ek.map(f => Object.assign({ tur: 'sans', astigmat: false }, f)).concat(FONTLAR_GOOGLE, FONTLAR_SISTEM);
   }
 
@@ -860,6 +926,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (metin !== undefined) e.textContent = metin;
     return e;
   }
+  // Paneldeki tuş işleyicisi: pencerenin yakalama aşamasında sayfadan önce çalışır (2.4.0)
+  function tus(elm, tur, fn) { (elm.__stTus || (elm.__stTus = {}))[tur] = fn; }
   function dug(metin, baslik, is, sinif) {
     const b = el('button', sinif || '', metin);
     if (baslik) b.title = baslik;
@@ -938,7 +1006,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     // Listeye tıklayınca ↑ ↓ ile önceki / sonraki bölge ya da nesne seçilir (2.3.0)
     for (const [lb, isaretli] of [[bolgeLb, '.o.a'], [nesneLb, '.o.ana, .o.s']]) {
       lb.tabIndex = 0;
-      lb.addEventListener('keydown', e => {
+      tus(lb, 'keydown', e => {
         const y = { ArrowDown: 1, ArrowUp: -1 }[e.key];
         if (!y) return;
         e.preventDefault(); e.stopPropagation();
@@ -992,7 +1060,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   }
   function temaDegistir(ad) {
     if (!temaAdlari().includes(ad)) return;
-    depo.tema = ad; yaz(SK('tema'), ad);
+    depo.tema = ad;
+    if (depo.siteTema) { depo.siteTema = ad; yaz(SK('siteTema'), ad); } else yaz('paletSecili', ad);
     uygula(true); fontlariHazirla(); hepsiniCiz();
     anlik('Tema: ' + ad);
   }
@@ -1237,14 +1306,14 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     }
     // Ok tuşları canlı uygular; tuş bırakılınca geçmişe tek adım yazılır
     const okTusu = (alan, fn) => {
-      alan.addEventListener('keydown', e => {
+      tus(alan, 'keydown', e => {
         const y = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
         if (!y) return;
         e.preventDefault(); e.stopPropagation();
         fn(y[0] * (e.shiftKey ? 10 : 1), y[1] * (e.shiftKey ? 10 : 1));
         boya(); degisti(suAnki(), false);
       });
-      alan.addEventListener('keyup', e => { if (/^Arrow/.test(e.key)) degisti(suAnki(), true); });
+      tus(alan, 'keyup', e => { if (/^Arrow/.test(e.key)) degisti(suAnki(), true); });
     };
     okTusu(sv, (dx, dy) => { s = sinirla(s + dx / 100, 0, 1); v = sinirla(v + dy / 100, 0, 1); });
     okTusu(ton, (dx, dy) => { h = ((h + dx + dy) % 360 + 360) % 360; });
@@ -1306,10 +1375,10 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         const x = Math.round(sinirla(taban + yon * 10 * oz.adim, oz.min, oz.max) * 1000) / 1000;
         alanEl.value = x; kaydirici.value = x; sayi.value = x; yazHepsi(x, false);
       };
-      sayi.addEventListener('keydown', e => onAdim(sayi, e));
-      kaydirici.addEventListener('keydown', e => onAdim(kaydirici, e));
+      tus(sayi, 'keydown', e => onAdim(sayi, e));
+      tus(kaydirici, 'keydown', e => onAdim(kaydirici, e));
       sayi.addEventListener('input', () => { if (sayi.value !== '') { kaydirici.value = sinirla(+sayi.value, oz.min, oz.max); yazHepsi(+kaydirici.value, false); } });
-      for (const a of [sayi, kaydirici]) a.addEventListener('keyup', e => { if (/^Arrow/.test(e.key)) yazHepsi(+kaydirici.value, true); });
+      for (const a of [sayi, kaydirici]) tus(a, 'keyup', e => { if (/^Arrow/.test(e.key)) yazHepsi(+kaydirici.value, true); });
       sayi.addEventListener('change', () => {
         if (sayi.value === '') { yazHepsi(null, true); return; }
         const x = sinirla(+sayi.value, oz.min, oz.max);
@@ -1335,7 +1404,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       b.dataset.odak = ozId + ':f';
       // Liste kapalıyken ok tuşlarıyla yazı tiplerinde gezinme; tuş bırakılınca geçmişe tek adım (2.3.0)
       let gezilen = v || null;
-      b.addEventListener('keydown', e => {
+      tus(b, 'keydown', e => {
         const adim = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10, Home: -1e6, End: 1e6 }[e.key];
         if (!adim) return;
         e.preventDefault(); e.stopPropagation();
@@ -1346,7 +1415,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         b.style.fontFamily = gezilen ? aileYigini(gezilen) : '';
         yazHepsi(gezilen, false);
       });
-      b.addEventListener('keyup', e => {
+      tus(b, 'keyup', e => {
         if (!/^(Arrow|Page|Home|End)/.test(e.key)) return;
         sonraYaz('fontGez', () => anlik(`${oz.ad}: ${gezilen || 'temadan'}: ${adlar(ilgili)}`), 600);
       });
@@ -1385,13 +1454,15 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     const o = [];
     const bas = m => o.push(el('div', 'bas', m));
     const oge = (m, is, sinif, baslik) => { const b = dug(m, baslik || '', () => { is(); }, 'oge' + (sinif ? ' ' + sinif : '')); o.push(b); return b; };
-    bas('SAYFA TEMASI · ' + depo.tema);
+    bas('SAYFA TEMASI · ' + depo.tema + (depo.siteTema ? ' · yalnız bu site' : ' · bütün siteler'));
     oge('Yeni tema (bu temanın kopyası)…', temaKopyala);
+    if (!depo.siteTema) oge(`Yalnız ${SITE} için başka tema seç`, () => { depo.siteTema = depo.tema; yaz(SK('siteTema'), depo.tema); menuCiz(); hepsiniCiz(); bildir(`Bundan sonra açılır listedeki seçim yalnız ${SITE} için`); });
+    else oge(`${SITE} ortak temayı izlesin (şimdi: ${depo.tema})`, () => { depo.siteTema = null; yaz(SK('siteTema'), null); temaDegistir(oku('paletSecili', depo.tema)); menuCiz(); });
     if (!hazirMi(depo.tema)) oge('Temanın adını değiştir…', temaAdDegistir);
     const n = islenmemis(depo.tema);
     if ((n || taslakSayisi(depo.tema)) && hazirMi(depo.tema)) oge('Fabrika ayarına dön', temaSifirla);
     if (depo.tema !== 'Orijinal') oge('Temayı listeden kaldır', temaSil);
-    if (depo.kul.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.kul.silinen = []; kulKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
+    if (depo.pal.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.pal.silinen = []; palKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
     bas('PANEL TEMASI');
     for (const ad of Object.keys(PANEL_TEMALARI)) {
       const b = oge(ad, () => { depo.panelTema = ad; panelKaydet(); panelRenkUygula(); anlik('Panel teması: ' + ad); menuCiz(); hepsiniCiz(); }, ad === depo.panelTema ? 'secili' : '');
@@ -1407,9 +1478,9 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       oge('Taramayı temizle', () => { yaz(SK('tarama'), null); menuCiz(); bildir('Tarama temizlendi'); });
     }
     bas('AYAR DOSYASI');
-    oge('Dosyaya kaydet', dosyayaKaydet);
-    oge('Dosyadan yükle (eski Claude Tema dosyası da olur)', () => dosyaGirdi.click());
-    oge('Panoya kopyala', () => { panoya(JSON.stringify(disaAktar(false), null, 1)); bildir('Ayarlar panoya kopyalandı'); });
+    oge('Tümünü dosyaya kaydet (bütün siteler, temalar, panel)', dosyayaKaydet);
+    oge('Dosyadan yükle (yedek, eski site ayarı ya da Claude Tema dosyası)', () => dosyaGirdi.click());
+    oge('Tümünü panoya kopyala', () => { panoya(JSON.stringify(yedekAl(), null, 1)); bildir('Bütün ayarlar panoya kopyalandı'); });
     bas('PANEL');
     const boy = el('div', 'sira');
     boy.append(el('span', '', 'Yazı boyu'));
@@ -1456,8 +1527,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       s3.append(ekle, dug('Ekle', '', () => {
         const x = ekle.value.trim(); if (!x) return;
         const f = /^https?:/i.test(x) ? { ad: decodeURIComponent(x.split('/').pop().split(/[.?]/)[0]).replace(/[-_+]/g, ' ') || 'Bağlantı yazı tipi', kaynak: 'baglanti', url: x } : { ad: x, kaynak: 'google' };
-        if (!depo.kul.fontlar.some(k => k.ad === f.ad)) depo.kul.fontlar.push(Object.assign({ tur: 'sans', astigmat: false }, f));
-        kulKaydet();
+        if (!depo.pal.fontlar.some(k => k.ad === f.ad)) depo.pal.fontlar.push(Object.assign({ tur: 'sans', astigmat: false }, f));
+        palKaydet();
         fontHazirla(f.ad).then(() => { sec(f.ad); acilirKapat(); });
       }));
       const dosya = el('input'); dosya.type = 'file'; dosya.accept = '.woff2,.woff,.ttf,.otf'; dosya.style.display = 'none';
@@ -1467,8 +1538,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         f.arrayBuffer().then(buf => {
           depo.fontVeri[ad] = [{ style: 'normal', weight: '100 900', range: '', b64: bufB64(buf) }];
           yaz('fontVeri', depo.fontVeri);
-          if (!depo.kul.fontlar.some(k => k.ad === ad)) depo.kul.fontlar.push({ ad, kaynak: 'yuklenen', tur: 'sans', astigmat: false });
-          kulKaydet();
+          if (!depo.pal.fontlar.some(k => k.ad === ad)) depo.pal.fontlar.push({ ad, kaynak: 'yuklenen', tur: 'sans', astigmat: false });
+          palKaydet();
           return fontHazirla(ad);
         }).then(() => { sec(ad); acilirKapat(); });
       });
@@ -1499,37 +1570,50 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   /* ---------------- tema işleri ---------------- */
   function benzersizAd(ad) {
     let a = ad, i = 2;
-    while (temaAdlari().includes(a) || depo.kul.temalar[a]) a = `${ad} ${i++}`;
+    while (temaAdlari().includes(a) || depo.pal.temalar[a]) a = `${ad} ${i++}`;
     return a;
+  }
+  // Yeni tema: renkler ortak palete, nesne ayarı bu siteye kopyalanır (2.4.0)
+  function yeniTema(t, yeni) {
+    depo.pal.temalar[yeni] = { temel: t.temel, degerler: kopya(t.temel === 'goz' ? t.degerler : {}) };
+    depo.kul.temalar[yeni] = { nesneler: kopya(t.nesneler) };
+    kulKaydet(); palKaydet(); acilirKapat(); temaDegistir(yeni);
   }
   function temaKopyala() {
     const t = aktif();
     const ad = prompt('Yeni temanın adı:', benzersizAd(t.ad + ' kopya'));
     if (!ad || !ad.trim()) return;
-    const yeni = benzersizAd(ad.trim());
-    depo.kul.temalar[yeni] = { temel: t.temel, degerler: kopya(t.temel === 'goz' ? t.degerler : {}), nesneler: kopya(t.nesneler) };
-    kulKaydet(); acilirKapat(); temaDegistir(yeni);
+    yeniTema(t, benzersizAd(ad.trim()));
+  }
+  // Başka sitelerin kayıtlarına da uygulanır (ad değişikliği, silme)
+  function herSite(fn) {
+    for (const a of tumAnahtarlar().filter(x => /:kullanici$/.test(x) && x !== SK('kullanici'))) { const k = kulDuzelt(oku(a, null)); fn(k); yaz(a, k); }
+    fn(depo.kul);
   }
   function temaAdDegistir() {
     const eski = depo.tema;
-    const ad = prompt('Temanın yeni adı:', eski);
+    const ad = prompt('Temanın yeni adı (bütün sitelerde):', eski);
     if (!ad || !ad.trim() || ad.trim() === eski) return;
     const yeni = benzersizAd(ad.trim());
-    depo.kul.temalar[yeni] = depo.kul.temalar[eski]; delete depo.kul.temalar[eski];
-    if (depo.kul.taslaklar[eski]) { depo.kul.taslaklar[yeni] = depo.kul.taslaklar[eski]; delete depo.kul.taslaklar[eski]; }
-    kulKaydet(); acilirKapat(); temaDegistir(yeni);
+    const tasi = o => { if (o[eski]) { o[yeni] = o[eski]; delete o[eski]; } };
+    tasi(depo.pal.temalar); tasi(depo.pal.taslaklar);
+    herSite(k => { tasi(k.temalar); tasi(k.taslaklar); });
+    for (const a of tumAnahtarlar().filter(x => /:siteTema$/.test(x))) if (oku(a, null) === eski) yaz(a, yeni);
+    kulKaydet(); palKaydet(); acilirKapat(); temaDegistir(yeni);
   }
   function temaSifirla() {
-    if (!confirm(`"${depo.tema}" ilk hâline dönsün mü? Kayıtlı ve kaydedilmemiş değişiklikleri silinir. (Geçmişten geri alınabilir.)`)) return;
+    if (!confirm(`"${depo.tema}" ilk hâline dönsün mü? Renkleri bütün sitelerde, nesne ayarları bu sitede silinir; kaydedilmemiş değişiklikler de gider. (Geçmişten geri alınabilir.)`)) return;
+    delete depo.pal.temalar[depo.tema]; delete depo.pal.taslaklar[depo.tema];
     delete depo.kul.temalar[depo.tema]; delete depo.kul.taslaklar[depo.tema];
-    kulKaydet(); uygula(true); acilirKapat(); hepsiniCiz(); anlik('Tema sıfırlandı: ' + depo.tema);
+    kulKaydet(); palKaydet(); uygula(true); acilirKapat(); hepsiniCiz(); anlik('Tema sıfırlandı: ' + depo.tema);
   }
   function temaSil() {
     const ad = depo.tema;
-    if (!confirm(`"${ad}" teması listeden kaldırılsın mı? (Geçmişten geri alınabilir.)`)) return;
-    if (hazirMi(ad)) { if (!depo.kul.silinen.includes(ad)) depo.kul.silinen.push(ad); }
+    if (!confirm(`"${ad}" teması bütün sitelerde listeden kaldırılsın mı? (Geçmişten geri alınabilir.)`)) return;
+    if (hazirMi(ad)) { if (!depo.pal.silinen.includes(ad)) depo.pal.silinen.push(ad); }
+    delete depo.pal.temalar[ad]; delete depo.pal.taslaklar[ad];
     delete depo.kul.temalar[ad]; delete depo.kul.taslaklar[ad];
-    kulKaydet(); acilirKapat();
+    kulKaydet(); palKaydet(); acilirKapat();
     temaDegistir(temaAdlari()[0]);
   }
   // Taslak: Kaydet üzerine yazar, Farklı kaydet yeni tema açar, Vazgeç siler (2.2.0)
@@ -1545,32 +1629,34 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       dug('Vazgeç', 'Kaydedilmemiş değişiklikleri sil', taslakVazgec));
   }
   function taslakKaydet() {
-    const ad = depo.tema, ts = depo.kul.taslaklar[ad];
-    if (!ts) return;
-    if (hazirMi(ad) && !confirm(`Hazır tema "${ad}" değiştirilsin mi? (Sonra ☰ → "Fabrika ayarına dön" ile ilk hâline döner.)`)) return;
+    const ad = depo.tema, ts = depo.kul.taslaklar[ad] || {}, pt = depo.pal.taslaklar[ad] || {};
+    if (!taslakSayisi(ad)) return;
+    const renkVar = Object.keys(pt.degerler || {}).length || pt.temel;
+    if (hazirMi(ad) && !confirm(`Hazır tema "${ad}" değiştirilsin mi?${renkVar ? ' Renkler bütün sitelerde değişir.' : ''} (Sonra ☰ → "Fabrika ayarına dön" ile ilk hâline döner.)`)) return;
+    if (renkVar) {
+      const p = palTema(ad);
+      if (pt.temel) p.temel = pt.temel;
+      for (const [k, v] of Object.entries(pt.degerler || {})) { if (v === null) delete p.degerler[k]; else p.degerler[k] = v; }
+    }
     const u = kulTema(ad);
-    if (ts.temel) u.temel = ts.temel;
-    for (const [p, v] of Object.entries(ts.degerler || {})) { if (v === null) delete u.degerler[p]; else u.degerler[p] = v; }
     for (const [id, o] of Object.entries(ts.nesneler || {})) {
       const h = u.nesneler[id] || (u.nesneler[id] = {});
-      for (const [p, v] of Object.entries(o)) { if (v === null) delete h[p]; else h[p] = v; }
+      for (const [k, v] of Object.entries(o)) { if (v === null) delete h[k]; else h[k] = v; }
       if (!Object.keys(h).length) delete u.nesneler[id];
     }
-    delete depo.kul.taslaklar[ad];
-    kulKaydet(); uygula(true); hepsiniCiz(); anlik('Kaydedildi: ' + ad);
+    delete depo.kul.taslaklar[ad]; delete depo.pal.taslaklar[ad];
+    kulKaydet(); palKaydet(); uygula(true); hepsiniCiz(); anlik('Kaydedildi: ' + ad);
   }
   function taslakFarkliKaydet() {
     const t = aktif();
     const ad = prompt('Yeni temanın adı:', benzersizAd(t.ad + ' 2'));
     if (!ad || !ad.trim()) return;
-    const yeni = benzersizAd(ad.trim());
-    depo.kul.temalar[yeni] = { temel: t.temel, degerler: kopya(t.temel === 'goz' ? t.degerler : {}), nesneler: kopya(t.nesneler) };
-    delete depo.kul.taslaklar[t.ad];
-    kulKaydet(); acilirKapat(); temaDegistir(yeni);
+    delete depo.kul.taslaklar[t.ad]; delete depo.pal.taslaklar[t.ad];
+    yeniTema(t, benzersizAd(ad.trim()));
   }
   function taslakVazgec() {
-    delete depo.kul.taslaklar[depo.tema];
-    kulKaydet(); uygula(true); hepsiniCiz(); anlik('Vazgeçildi: ' + depo.tema);
+    delete depo.kul.taslaklar[depo.tema]; delete depo.pal.taslaklar[depo.tema];
+    kulKaydet(); palKaydet(); uygula(true); hepsiniCiz(); anlik('Vazgeçildi: ' + depo.tema);
   }
 
   /* ---------------- dosya ve pano (0005) ---------------- */
@@ -1586,18 +1672,18 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
   }
   const damga = () => { const d = new Date(), p = x => String(x).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
-  function disaAktar(fontVeriDahil) {
-    const d = {
-      tur: 'site-tema-ayar', surum: 2, betik: SURUM, tarih: new Date().toISOString(), site: SITE, aktifTema: depo.tema,
-      kalici: { temalar: kopya(depo.kul.temalar), ozelNesneler: kopya(depo.kul.ozelNesneler), fontlar: kopya(depo.kul.fontlar) },
-      panel: { tema: depo.panelTema, ozel: kopya(depo.panelOzel) },
-    };
-    if (fontVeriDahil) d.fontVeri = depo.fontVeri;
+  // Yedek: Site Tema'nın bütün kayıtları (bütün siteler, temalar, panel, yazı tipi dosyaları);
+  // geçmiş, tarama ve yazı tipi önbelleği dışarıda kalır (2.4.0)
+  const YEDEK_DISI = /(:gecmis|:tarama)$|^fontOnbellek$/;
+  function yedekAl() {
+    yaz(SK('kullanici'), depo.kul); yaz('paletler', depo.pal); yaz('panelTema', depo.panelTema); yaz('panelOzel', depo.panelOzel);
+    const d = { tur: 'site-tema-yedek', surum: 3, betik: SURUM, tarih: new Date().toISOString(), kayitlar: {} };
+    for (const a of tumAnahtarlar()) if (!YEDEK_DISI.test(a)) { const v = oku(a, undefined); if (v !== undefined) d.kayitlar[a] = v; }
     return d;
   }
   function dosyayaKaydet() {
-    dosyaIndir(`site-tema-ayar_${SITE}_${damga()}.json`, JSON.stringify(disaAktar(true), null, 1));
-    bildir('Ayar dosyası indirildi');
+    dosyaIndir(`site-tema-yedek_${damga()}.json`, JSON.stringify(yedekAl(), null, 1));
+    bildir('Bütün ayarlar dosyaya kaydedildi');
   }
   // Eski Claude Tema (0.5.x) dosyası: yer → nesne, "sekme.ozellik" → özellik
   function v1Cevir(d) {
@@ -1624,16 +1710,30 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     let d;
     try { d = JSON.parse(metin); } catch (e) { bildir('Dosya okunamadı: JSON değil'); return; }
     if (d && d.tur === 'claude-tema-ayar') d = v1Cevir(d);
-    if (!d || d.tur !== 'site-tema-ayar') { bildir('Bu bir Site Tema ayar dosyası değil'); return; }
+    if (d && d.tur === 'site-tema-yedek' && d.kayitlar) {
+      const n = Object.keys(d.kayitlar).length;
+      if (!confirm(`Yedekteki ${n} kayıt yüklensin mi? Aynı adlı kayıtlar dosyadakiyle değişir, sayfa yenilenir.`)) return;
+      for (const [a, v] of Object.entries(d.kayitlar)) if (!YEDEK_DISI.test(a)) yaz(a, v);
+      bildir('Yedek yüklendi; sayfa yenileniyor');
+      setTimeout(() => location.reload(), 400);
+      return;
+    }
+    if (!d || d.tur !== 'site-tema-ayar') { bildir('Bu bir Site Tema dosyası değil'); return; }
     if (d.panel) { depo.panelTema = PANEL_TEMALARI[d.panel.tema] ? d.panel.tema : depo.panelTema; depo.panelOzel = Object.assign({}, depo.panelOzel, d.panel.ozel || {}); panelKaydet(); panelRenkUygula(); }
     if (d.site && d.site !== SITE) { bildir(`Dosya ${d.site} için; yalnız panel ayarları alındı`); anlik('Dosyadan panel ayarı'); hepsiniCiz(); return; }
     const k = d.kalici || {};
-    Object.assign(depo.kul.temalar, k.temalar || {});
+    // Eski site dosyası: renkler ortak palete, nesne ayarı bu siteye (2.4.0)
+    for (const [ad, t] of Object.entries(k.temalar || {})) {
+      if (!t) continue;
+      if ((t.degerler && Object.keys(t.degerler).length) || t.temel || !hazirMi(ad)) { const p = palTema(ad); Object.assign(p.degerler, t.degerler || {}); if (t.temel) p.temel = t.temel; }
+      if (t.nesneler) { const u = kulTema(ad); for (const [id, o] of Object.entries(t.nesneler)) u.nesneler[id] = Object.assign({}, u.nesneler[id], o); }
+    }
+    yaz('paletler', depo.pal);
     for (const n of k.ozelNesneler || []) if (!depo.kul.ozelNesneler.some(o => o.id === n.id)) depo.kul.ozelNesneler.push(n);
-    for (const f of k.fontlar || []) if (!depo.kul.fontlar.some(o => o.ad === f.ad)) depo.kul.fontlar.push(f);
+    for (const f of k.fontlar || []) if (!depo.pal.fontlar.some(o => o.ad === f.ad)) depo.pal.fontlar.push(f);
     if (d.fontVeri) { Object.assign(depo.fontVeri, d.fontVeri); yaz('fontVeri', depo.fontVeri); }
     yaz(SK('kullanici'), depo.kul);
-    if (d.aktifTema && temaAdlari().includes(d.aktifTema)) { depo.tema = d.aktifTema; yaz(SK('tema'), depo.tema); }
+    if (d.aktifTema && temaAdlari().includes(d.aktifTema)) temaDegistir(d.aktifTema);
     uygula(true); fontlariHazirla(); hepsiniCiz(); anlik('Dosyadan yüklendi');
     bildir('Ayarlar yüklendi');
   }
@@ -2473,6 +2573,18 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   if (document.body) baslat(); else document.addEventListener('DOMContentLoaded', baslat, { once: true });
 
   const yaziAlaniMi = n => n && (n.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName));
+  // Sayfa (claude.ai: mesajlar arasında ok tuşuyla gezinme) panelin tuşunu yakalamasın:
+  // betik document-start'ta sayfadan önce dinler; paneldeki tuş önce panele gider, sonra sayfaya hiç inmez (2.4.0)
+  for (const tur of ['keydown', 'keyup', 'keypress']) {
+    window.addEventListener(tur, e => {
+      if (!bizdenMi(e)) return;
+      const h = e.composedPath()[0];
+      const f = h && h.__stTus && h.__stTus[tur];
+      if (f) f(e);
+      const yalin = !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (e.defaultPrevented || (yalin && /^(Arrow|Page|Home|End)/.test(e.key)) || (yalin && e.key !== 'Escape' && yaziAlaniMi(h))) e.stopImmediatePropagation();
+    }, true);
+  }
   window.addEventListener('keydown', e => {
     if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === 'KeyY') {
       e.preventDefault(); e.stopPropagation();

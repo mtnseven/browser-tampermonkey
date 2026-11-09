@@ -12,4 +12,8 @@
 <div class="rounded-lg" aria-label="Mesaj 2/2"><div data-testid="assistant-message"><div class="prose"><div class="standard-markdown"><p class="text-primary" id="yp">yanıt <code id="sk">kod</code></p>
 <div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-[var(--msg-block-radius,0.5rem)]" id="kk"><pre class="code-block__code"><code>x = 1</code></pre></div></div></div></div></div>
 <fieldset><div class="bg-surface-3 relative flex" id="yk"><span class="pointer-events-none select-none absolute" id="yt">Yanıtla</span><div class="tiptap ProseMirror" contenteditable="true"></div></div></fieldset>
-</main></div></body></html>
+</main></div>
+<script>/* claude.ai gibi: ok tuşlarını yakalama aşamasında yutan sayfa dinleyicisi */
+window.addEventListener("keydown", e => { if (/^Arrow/.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+document.addEventListener("keydown", e => { if (/^Arrow/.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);</script>
+</body></html>

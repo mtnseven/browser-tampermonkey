@@ -12,6 +12,7 @@ window.__depo = JSON.parse(sessionStorage.getItem('__depo') || '{}');
 window.GM_getValue = (k, v) => k in __depo ? JSON.parse(JSON.stringify(__depo[k])) : v;
 window.GM_setValue = (k, v) => { __depo[k] = JSON.parse(JSON.stringify(v)); sessionStorage.setItem('__depo', JSON.stringify(__depo)); };
 window.GM_registerMenuCommand = () => {};
+window.GM_listValues = () => Object.keys(__depo);
 window.__dinle = {}; window.GM_addValueChangeListener = (k, f) => { __dinle[k] = f; };
 window.GM_xmlhttpRequest = o => setTimeout(() => o.onerror && o.onerror(), 0);
 window.GM_setClipboard = t => { window.__pano = t; };
@@ -153,14 +154,21 @@ with sync_playwright() as p:
         kontrol(t + 'tarama dosyasi', paket['tur'] == 'site-tema-tarama' and len(paket['ogeler']) == tr and paket['stilYolu'] == 'adoptedStyleSheets')
         kontrol(t + 'tarama kural eslesmesi', len(paket['kurallar']) > 20 and not paket['kuralHata'] and any(v['sayi'] > 0 for v in paket['kurallar'].values()))
         with s.expect_download() as d:
-            s.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent==='Dosyaya kaydet').click()")
+            s.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent.startsWith('Tümünü dosyaya kaydet')).click()")
         ayar = json.load(open(d.value.path(), encoding='utf-8'))
-        kontrol(t + 'ayar dosyasi', ayar['tur'] == 'site-tema-ayar' and 'Göz' in ayar['kalici']['temalar'])
+        ky = ayar.get('kayitlar', {})
+        kontrol(t + 'yedek dosyasi', ayar['tur'] == 'site-tema-yedek' and 'Göz' in ky.get('paletler', {}).get('temalar', {}) and 'claude.ai:kullanici' in ky and 'panelTema' in ky and 'claude.ai:gecmis' not in ky)
         v1 = {'tur': 'claude-tema-ayar', 'surum': 1, 'aktifTema': 'Eski', 'kalici': {'temalar': {'Eski': {'temel': 'goz', 'degerler': {'--zemin-ana': '#121212'}, 'yerler': {'balon': {'renkler.zemin': '#556677', 'yazi.boyut': 17}}}}, 'ozelYerler': [], 'fontlar': []}}
         s.evaluate(f"""(() => {{ const i = {K}.querySelector('input[type=file]'); const dt = new DataTransfer();
           dt.items.add(new File([{json.dumps(json.dumps(v1))}], 'eski.json', {{type:'application/json'}})); i.files = dt.files; i.dispatchEvent(new Event('change')); }})()""")
         s.wait_for_timeout(300)
         kontrol(t + 'v1 dosyasi yuklendi', css(s, '.bg-bg-300', 'backgroundColor') == 'rgb(85, 102, 119)' and css(s, 'body', 'backgroundColor') == 'rgb(18, 18, 18)' and css(s, '.bg-bg-300', 'fontSize') == '17px')
+        kontrol(t + 'v1 renkleri ortak palette', 'Eski' in s.evaluate("Object.keys(__depo['paletler'].temalar)"))
+        # Yedekten geri yükleme: v1'den önceki hâl gelir, sayfa yenilenir
+        s.evaluate(f"""(() => {{ const i = {K}.querySelector('input[type=file]'); const dt = new DataTransfer();
+          dt.items.add(new File([{json.dumps(json.dumps(ayar))}], 'yedek.json', {{type:'application/json'}})); i.files = dt.files; i.dispatchEvent(new Event('change')); }})()""")
+        s.wait_for_timeout(1500)
+        kontrol(t + 'yedekten geri yuklendi', css(s, 'body', 'backgroundColor') == 'rgb(16, 20, 24)' and 'Eski' not in s.evaluate("Object.keys(__depo['paletler'].temalar)") and s.evaluate(f"{K}.querySelector('.cubuk select').value") == 'Göz')
         # Temizle düğmesi ve Ctrl+Alt (panel açık)
         bolge_tikla(s, 'Sohbet'); nesne_tikla(s, 'Kod bloğu'); nesne_tikla(s, 'Claude yanıtı', ctrl=True)
         kontrol(t + 'secim balonu listelerin altinda', s.evaluate(f"(() => {{ const a={K}.querySelector('.secim').getBoundingClientRect(), b={K}.querySelector('.listeler').getBoundingClientRect(); return b.height > 0 && a.top >= b.bottom - 1 && a.bottom <= innerHeight; }})()"))
@@ -301,9 +309,9 @@ with sync_playwright() as p:
                              ('kod blogu', '#kk', 'backgroundColor', '--kod-zemin'), ('yazma kutusu', '#yk', 'backgroundColor', '--zemin-koyu'),
                              ('yer tutucu', '#yt', 'color', '--metin-placeholder')]:
         kontrol('yeni yapi ' + ad, css(yd, sec, oz) == yd_rgb(deg))
-    yd.evaluate("__dinle['claude.ai:tema']('claude.ai:tema', 'Göz', 'Kağıt (açık)', true)"); yd.wait_for_timeout(150)
+    yd.evaluate("__dinle['paletSecili']('paletSecili', 'Göz', 'Kağıt (açık)', true)"); yd.wait_for_timeout(150)
     kontrol('baska sekmedeki tema degisikligi geldi', css(yd, 'main', 'backgroundColor') == 'rgb(241, 236, 225)')
-    yd.evaluate("__dinle['claude.ai:kullanici']('claude.ai:kullanici', null, {temalar: {'Kağıt (açık)': {degerler: {'--zemin-ana': '#102030'}, nesneler: {}}}}, true)"); yd.wait_for_timeout(150)
+    yd.evaluate("__dinle['paletler']('paletler', null, {temalar: {'Kağıt (açık)': {degerler: {'--zemin-ana': '#102030'}}}}, true)"); yd.wait_for_timeout(150)
     kontrol('baska sekmedeki renk degisikligi geldi', css(yd, 'main', 'backgroundColor') == 'rgb(16, 32, 48)')
     kontrol('yeni yapi mesaj kutusu boyanmadi', css(yd, '[aria-label="Mesaj 1/2"]', 'backgroundColor') == 'rgba(0, 0, 0, 0)')
     # 2.3.0: renk noktasının iki ekseni ayrı kaydırıcı, ok tuşları, odak korunur
@@ -338,5 +346,18 @@ with sync_playwright() as p:
     # Ctrl+S taslağı kaydeder
     yd.evaluate(f"{K}.querySelector('.ayar').focus()"); yd.keyboard.press('Control+s'); yd.wait_for_timeout(600)
     kontrol('ctrl+s taslagi kaydetti', not yd.evaluate(f"!!{K}.querySelector('.taslak.acik')") and 'Kağıt (açık)' in yd.evaluate("Object.keys((__depo['claude.ai:kullanici'] || {temalar:{}}).temalar)"))
+    # 2.4.0 göç: eski kayıtta renkler sitedeydi; ortak palete taşınır, nesne ayarı sitede kalır
+    eski = {'claude.ai:kullanici': {'temalar': {'Göz': {'degerler': {'--zemin-ana': '#112233'}, 'nesneler': {'balon': {'zemin': '#445566'}}},
+                                                'Benim': {'temel': 'goz', 'degerler': {'--zemin-ana': '#223344'}, 'nesneler': {}}}, 'silinen': ['Grafit'], 'ozelNesneler': [], 'fontlar': []},
+            'claude.ai:tema': 'Benim'}
+    gc = b.new_page(viewport={'width': 1200, 'height': 700})
+    gc.add_init_script("if (!sessionStorage.getItem('__depo')) sessionStorage.setItem('__depo', " + json.dumps(json.dumps(eski)) + ");")
+    gc.add_init_script(SHIM + betik); gc.goto(KOK + 'yeni_dom.html'); gc.wait_for_timeout(500)
+    pal = gc.evaluate("__depo['paletler']"); kul = gc.evaluate("__depo['claude.ai:kullanici']")
+    kontrol('goc renkler ortak palette', pal['temalar']['Göz']['degerler'] == {'--zemin-ana': '#112233'} and pal['temalar']['Benim']['degerler'] == {'--zemin-ana': '#223344'} and pal['silinen'] == ['Grafit'])
+    kontrol('goc nesne ayari sitede kaldi', kul['temalar']['Göz'].get('nesneler') == {'balon': {'zemin': '#445566'}} and 'degerler' not in kul['temalar']['Göz'])
+    kontrol('goc secili tema ve gorunum', gc.evaluate("__depo['paletSecili']") == 'Benim' and css(gc, 'main', 'backgroundColor') == 'rgb(34, 51, 68)')
+    gc.evaluate("__depo['paletSecili'] = 'Göz'; sessionStorage.setItem('__depo', JSON.stringify(__depo))"); gc.reload(); gc.wait_for_timeout(500)
+    kontrol('goc sonrasi Göz ayarlari', css(gc, 'main', 'backgroundColor') == 'rgb(17, 34, 51)' and css(gc, '.cds-user-message-body', 'backgroundColor') == 'rgb(68, 85, 102)')
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))
