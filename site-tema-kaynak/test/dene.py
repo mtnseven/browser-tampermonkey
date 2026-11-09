@@ -12,6 +12,7 @@ window.__depo = JSON.parse(sessionStorage.getItem('__depo') || '{}');
 window.GM_getValue = (k, v) => k in __depo ? JSON.parse(JSON.stringify(__depo[k])) : v;
 window.GM_setValue = (k, v) => { __depo[k] = JSON.parse(JSON.stringify(v)); sessionStorage.setItem('__depo', JSON.stringify(__depo)); };
 window.GM_registerMenuCommand = () => {};
+window.__dinle = {}; window.GM_addValueChangeListener = (k, f) => { __dinle[k] = f; };
 window.GM_xmlhttpRequest = o => setTimeout(() => o.onerror && o.onerror(), 0);
 window.GM_setClipboard = t => { window.__pano = t; };
 """
@@ -299,6 +300,10 @@ with sync_playwright() as p:
                              ('kod blogu', '#kk', 'backgroundColor', '--kod-zemin'), ('yazma kutusu', '#yk', 'backgroundColor', '--zemin-koyu'),
                              ('yer tutucu', '#yt', 'color', '--metin-placeholder')]:
         kontrol('yeni yapi ' + ad, css(yd, sec, oz) == yd_rgb(deg))
+    yd.evaluate("__dinle['claude.ai:tema']('claude.ai:tema', 'Göz', 'Kağıt (açık)', true)"); yd.wait_for_timeout(150)
+    kontrol('baska sekmedeki tema degisikligi geldi', css(yd, 'main', 'backgroundColor') == 'rgb(241, 236, 225)')
+    yd.evaluate("__dinle['claude.ai:kullanici']('claude.ai:kullanici', null, {temalar: {'Kağıt (açık)': {degerler: {'--zemin-ana': '#102030'}, nesneler: {}}}}, true)"); yd.wait_for_timeout(150)
+    kontrol('baska sekmedeki renk degisikligi geldi', css(yd, 'main', 'backgroundColor') == 'rgb(16, 32, 48)')
     kontrol('yeni yapi mesaj kutusu boyanmadi', css(yd, '[aria-label="Mesaj 1/2"]', 'backgroundColor') == 'rgba(0, 0, 0, 0)')
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))

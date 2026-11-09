@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.2.1
+// @version      2.2.2
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -13,6 +13,7 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
+// @grant        GM_addValueChangeListener
 // @connect      fonts.googleapis.com
 // @connect      fonts.gstatic.com
 // @connect      *
@@ -21,7 +22,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.2.1';
+  const SURUM = '2.2.2';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -247,6 +248,13 @@
   const kulKaydet = () => sonraYaz('kul', () => yaz(SK('kullanici'), depo.kul));
   const panelKaydet = () => sonraYaz('panel', () => { yaz('panelTema', depo.panelTema); yaz('panelOzel', depo.panelOzel); });
   const secimKaydet = () => { yaz(SK('secim'), durum.secim); yaz(SK('bolge'), durum.bolge); };
+  // Başka sekmede (sohbet, /code) yapılan değişiklik bu sekmeye yenilemeden gelir (2.2.2)
+  if (typeof GM_addValueChangeListener === 'function') {
+    const uzaktan = f => (k, eski, yeni, uzak) => { if (uzak && yeni !== undefined) f(yeni); };
+    const yenile = () => { uygula(true); fontlariHazirla(); hepsiniCiz(); };
+    GM_addValueChangeListener(SK('kullanici'), uzaktan(v => { depo.kul = kulDuzelt(v); yenile(); }));
+    GM_addValueChangeListener(SK('tema'), uzaktan(v => { depo.tema = v; yenile(); }));
+  }
 
   /* ================================================================
      TEMA HESABI: hazır + betikteki (KALICI) + cihazdaki (kul)
