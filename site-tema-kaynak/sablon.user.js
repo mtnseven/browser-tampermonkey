@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.2.0
+// @version      2.2.1
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.2.0';
+  const SURUM = '2.2.1';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -106,9 +106,9 @@
     gozTemasi: true,
     bolgeler: [
       { id: 'sayfa', ad: 'Sayfa geneli', kok: null },
-      { id: 'solmenu', ad: 'Sol menü', kok: 'nav' },
-      { id: 'ust', ad: 'Üst çubuk', kok: 'header' },
-      { id: 'sohbet', ad: 'Sohbet', kok: 'main, .font-claude-response, .font-user-message' },
+      { id: 'solmenu', ad: 'Sol menü', kok: 'aside.dframe-sidebar, nav' },
+      { id: 'ust', ad: 'Üst çubuk', kok: '[data-testid="chat-header"], header' },
+      { id: 'sohbet', ad: 'Sohbet', kok: 'main, [data-testid="assistant-message"], [data-testid="user-message"], .font-claude-response, .font-user-message' },
       { id: 'yazma', ad: 'Yazma kutusu', kok: 'fieldset, .ProseMirror, [contenteditable="true"]' },
       { id: 'dosya', ad: 'Dosya paneli', kok: null },
       { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]' },
@@ -118,16 +118,16 @@
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
-      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '.bg-accent-main-000, .bg-accent-secondary-100, .bg-accent-pro-100' },
-      { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'nav.h-screen' },
-      { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: 'ul.flex.flex-col.gap-px li a' },
-      { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: 'header' },
-      { id: 'baslik', bolge: 'ust', ad: 'Sohbet başlığı', secici: '.font-copernicus' },
-      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '.font-user-message, [data-testid="user-message"]' },
-      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.group.relative.inline-flex.gap-2.bg-bg-300, div:has(> [data-testid="user-message"])' },
-      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '.font-claude-response, .font-claude-response-body, .font-claude-message' },
-      { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: '.font-claude-response code, .font-claude-response-body code' },
-      { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: 'pre, .code-block__code' },
+      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[class*="bg-accent"], [data-cds="Badge"]' },
+      { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'aside.dframe-sidebar, nav.h-screen' },
+      { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: '.dframe-sidebar .hit-row, ul.flex.flex-col.gap-px li a' },
+      { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: '[data-testid="chat-header"], header' },
+      { id: 'baslik', bolge: 'ust', ad: 'Sohbet başlığı', secici: '[data-testid="chat-header"] h2, h2[aria-label], .font-copernicus' },
+      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '[data-testid="user-message"], .font-user-message' },
+      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.cds-user-message-body, .group.relative.inline-flex.gap-2.bg-bg-300' },
+      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '[data-testid="assistant-message"] .prose, .font-claude-response, .font-claude-response-body, .font-claude-message' },
+      { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: ':is(.prose, .standard-markdown) code:not(pre code), .font-claude-response code, .font-claude-response-body code' },
+      { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: '.epitaxy-codeblock, div:has(> pre.code-block__code), pre, .code-block__code' },
       { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: 'div[class*="attachment"], div[class*="file-upload"]' },
       { id: 'yazma', bolge: 'yazma', ad: 'Yazma alanı', secici: '.ProseMirror' },
       { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"], button[data-testid*="model-selector"]' },

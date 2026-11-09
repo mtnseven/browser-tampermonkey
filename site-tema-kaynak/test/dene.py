@@ -286,5 +286,19 @@ with sync_playwright() as p:
     kontrol('telefon model uygulandi', t3.evaluate('__mm') == {'model': 'Sonnet 5.5', 'caba': 'Düşük'})
     kontrol('telefon model hatasi yok', not t3h)
     if t3h: print('   ', t3h[:3])
+    # claude.ai'nin 11.2026 yapısı (cds/df değişkenleri; tarama 09.11.2026): göz teması renkleri
+    yd = b.new_page(viewport={'width': 1200, 'height': 700})
+    yd.add_init_script(SHIM + betik); yd.goto(KOK + 'yeni_dom.html'); yd.wait_for_timeout(500)
+    def yd_rgb(n):
+        h = yd.evaluate(f"getComputedStyle(document.documentElement).getPropertyValue('{n}').trim()").lstrip('#')
+        return 'rgb(%d, %d, %d)' % tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    for ad, sec, oz, deg in [('sayfa zemini', 'main', 'backgroundColor', '--zemin-ana'), ('kenar cubugu', 'aside', 'backgroundColor', '--zemin-koyu'),
+                             ('acik satir', '.hit-row:has([aria-current])', 'backgroundColor', '--secili-zemin'), ('baslik', 'h2', 'color', '--metin-ana'),
+                             ('senin mesajin', '[data-testid=user-message] p', 'color', '--metin-ana'), ('mesaj balonu', '.cds-user-message-body', 'backgroundColor', '--zemin-kutu'),
+                             ('claude yaniti', '#yp', 'color', '--metin-claude'), ('satir ici kod', '#sk', 'color', '--kod-satirici'),
+                             ('kod blogu', '#kk', 'backgroundColor', '--kod-zemin'), ('yazma kutusu', '#yk', 'backgroundColor', '--zemin-koyu'),
+                             ('yer tutucu', '#yt', 'color', '--metin-placeholder')]:
+        kontrol('yeni yapi ' + ad, css(yd, sec, oz) == yd_rgb(deg))
+    kontrol('yeni yapi mesaj kutusu boyanmadi', css(yd, '[aria-label="Mesaj 1/2"]', 'backgroundColor') == 'rgba(0, 0, 0, 0)')
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))

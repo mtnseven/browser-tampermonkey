@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.2.0
+// @version      2.2.1
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.2.0';
+  const SURUM = '2.2.1';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -55,7 +55,7 @@
     "grup": "Genel Zemin & Metin",
     "ad": "--zemin-kutu",
     "deger": "#0b0d0f",
-    "not": "küçük kutular, mesaj balonu, satır içi kod zemini"
+    "not": "küçük kutular, mesaj balonu, satır içi kod, düğme üstünde zemini"
   },
   {
     "grup": "Genel Zemin & Metin",
@@ -234,9 +234,48 @@ body, html {
     color: var(--metin-ana) !important;
 }
 .flex.min-h-screen.w-full { background: var(--zemin-ana) !important; }
+
+/* ========== CLAUDE.AI TASARIM DEĞİŞKENLERİ (cds / df, 09.11.2026) ==========
+   claude.ai renkleri artık bu değişkenlerden okur (sohbet ve /code aynı).
+   Eski bg-bg-*, text-text-*, font-claude-* sınıfları sayfada yok; aşağıdaki
+   eski kurallar eski sayfa için kalır. Göz teması renkleri buraya bağlanır. */
+:root, .cds-root, .cds-dark-scope, .dframe-root, [class*="dframe-"] {
+    --cds-surface-1: var(--zemin-ana) !important;
+    --cds-surface-2: var(--zemin-koyu) !important;
+    --cds-surface-3: var(--zemin-koyu) !important;
+    --cds-surface-panel: var(--zemin-koyu) !important;
+    --cds-surface-popover: var(--zemin-koyu) !important;
+    --cds-fizzy-lake-color-sidebar: var(--zemin-koyu) !important;
+    --cds-fizzy-lake-color-card-hover: var(--zemin-kutu) !important;
+    --df-sidebar-bg: var(--zemin-koyu) !important;
+    --cds-text-primary: var(--metin-ana) !important;
+    --cds-text-secondary: var(--metin-soluk) !important;
+    --cds-fizzy-lake-color-secondary: var(--metin-soluk) !important;
+    --cds-text-muted: var(--metin-soluk) !important;
+    --cds-border: var(--cerceve) !important;
+    --cds-border-line: var(--cerceve) !important;
+    --cds-fizzy-lake-color-message-line: var(--cerceve) !important;
+    --cds-fizzy-lake-color-menu-line: var(--cerceve) !important;
+    --cds-fizzy-lake-color-composer-ring: var(--cerceve) !important;
+    --cds-bg-neutral-hover: var(--zemin-kutu) !important;
+    --cds-fill-ghost-hover: var(--zemin-kutu) !important;
+    --cds-fill-button-ghost-hover: var(--zemin-kutu) !important;
+    --cds-fill-ghost-selected: var(--secili-zemin) !important;
+    --cds-fill-accent: var(--vurgu-yesil) !important;
+    --cds-text-accent: var(--link) !important;
+}
+.dframe-root, main.dframe-content { background-color: var(--zemin-ana) !important; }
+/* Claude yanıtının içindeki her şey text-primary'yi Claude rengi okur */
+[data-testid="assistant-message"] {
+    --cds-text-primary: var(--metin-claude) !important;
+    color: var(--metin-claude) !important;
+}
+[data-testid="user-message"] { --cds-text-primary: var(--metin-ana) !important; }
 .bg-bg-100.rounded-b-2xl { background: var(--zemin-ana); }
 .bg-bg-200 { background: var(--zemin-ana); }
-.rounded-lg:not(.absolute), .rounded-xl:not(.absolute) { background: var(--zemin-kutu) !important; }
+/* Mesajın tamamını saran kutu (aria-label="Mesaj n") boyanmaz; yalnız küçük kutular */
+.rounded-lg:not(.absolute):not(:has([data-testid="user-message"], [data-testid="assistant-message"])),
+.rounded-xl:not(.absolute):not(:has([data-testid="user-message"], [data-testid="assistant-message"])) { background: var(--zemin-kutu) !important; }
 /* Proje paneli (Talimatlar, Bağlam, Bellek, Zamanlanmış): satırın üstüne
    serili görünmez tıklama düğmesi saydam kalmalı, yoksa soldaki yazıyı örter. */
 button.absolute.inset-0, button.absolute.inset-0:hover { background: transparent !important; }
@@ -244,13 +283,13 @@ button.absolute.inset-0, button.absolute.inset-0:hover { background: transparent
 
 /* ========== KENAR CUBUGU (sol menu) ========== */
 .z-sidebar .mb-1 { margin-bottom: 0 !important; }
-nav.h-screen {
+nav.h-screen, aside.dframe-sidebar {
     background: var(--zemin-koyu) !important;
     border-right: 1px solid var(--cerceve) !important;
     box-shadow: none !important;
 }
 /* Sol menü linkleri genel yeşil 'a' kuralından muaf */
-nav a { color: var(--metin-ana) !important; }
+nav a, .dframe-sidebar a { color: var(--metin-ana) !important; }
 
 /* Sohbet listesi satirlari */
 ul.flex.flex-col.gap-px li a {
@@ -273,10 +312,16 @@ ul.flex.flex-col.gap-px li a[class*="bg-bg-400"] {
     border-left: 3px solid var(--vurgu-yesil) !important;
 }
 ul.flex.flex-col.gap-px li a[class*="bg-bg-400"] .text-sm { margin-left: 5px; }
+/* Yeni kenar çubuğu satırları (yalnız renk; yerleşim claude.ai'nin) */
+.dframe-sidebar .hit-row a { color: var(--metin-soluk) !important; }
+.dframe-sidebar .hit-row:hover a { color: var(--metin-parlak) !important; }
+.dframe-sidebar .hit-row:hover { background: var(--zemin-kutu) !important; box-shadow: inset 3px 0 0 var(--hover-cizgi) !important; }
+.dframe-sidebar .hit-row:has(a[aria-current="page"]) { background: var(--secili-zemin) !important; box-shadow: inset 3px 0 0 var(--vurgu-yesil) !important; }
+.dframe-sidebar a[aria-current="page"] { color: var(--metin-parlak) !important; }
 
 /* ========== ANA SOHBET ALANI ========== */
 .h-screen.flex.flex-col.overflow-hidden { background: var(--zemin-ana) !important; }
-header {
+header, [data-testid="chat-header"] {
     background: var(--zemin-koyu) !important;
     border-bottom: 1px solid var(--cerceve) !important;
     box-shadow: none !important;
@@ -284,20 +329,21 @@ header {
 .relative.h-full.flex-1.flex.overflow-x-hidden.overflow-y-scroll { background: var(--zemin-ana) !important; }
 
 /* Kullanici mesaj balonu */
-.group.relative.inline-flex.gap-2.bg-bg-300 {
+.group.relative.inline-flex.gap-2.bg-bg-300, .cds-user-message-body {
     background: var(--zemin-kutu) !important;
     border: 1px solid var(--cerceve) !important;
     border-radius: 4px !important;
     box-shadow: none !important;
 }
-.font-user-message {
+.font-user-message, [data-testid="user-message"] {
     color: var(--metin-ana) !important;
     font-size: 13px !important;
 }
 
 /* Claude yanit yazisi */
 .font-claude-response,
-.font-claude-response-body {
+.font-claude-response-body,
+[data-testid="assistant-message"] :is(.prose, .standard-markdown) {
     color: var(--metin-claude) !important;
     background: transparent !important;
     font-size: 13px !important;
@@ -305,7 +351,8 @@ header {
 }
 /* Satır içi <code> (text-danger-000 kırmızısını ezer) */
 .font-claude-response code,
-.font-claude-response-body code {
+.font-claude-response-body code,
+:is(.prose, .standard-markdown) code:not(pre code) {
     color: var(--kod-satirici) !important;
     background: var(--zemin-kutu) !important;
 }
@@ -385,15 +432,20 @@ pre span[style*="rgb(129, 136, 152)"], code span[style*="rgb(129, 136, 152)"],
 /* Kod bloğu zeminleri */
 .\[\&_pre\>div\]\:bg-bg-000\/50 pre>div { background-color: var(--kod-zemin); }
 .bg-bg-000.w-full { background: var(--kod-zemin) !important; }
+/* Yeni kod bloğu kutusu: sohbette bg-bg-000/50 + pre, /code'da epitaxy-codeblock */
+.epitaxy-codeblock, div[class*="bg-bg-000"]:has(> pre), div:has(> pre.code-block__code) {
+    background: var(--kod-zemin) !important;
+    border: 1px solid var(--cerceve) !important;
+}
 
 /* Başlık fontu */
-.font-copernicus {
+.font-copernicus, [data-testid="chat-header"] h2, h2[aria-label] {
     color: var(--metin-ana) !important;
     font-size: 15px !important;
 }
 
 /* ========== GIRIS ALANI (yazma kutusu) ========== */
-.flex.flex-col.bg-bg-000.border-0\.5.border-border-300 {
+.flex.flex-col.bg-bg-000.border-0\.5.border-border-300, fieldset .bg-surface-3 {
     background: var(--zemin-koyu) !important;
     border: 1px solid var(--cerceve) !important;
     border-radius: 4px !important;
@@ -406,6 +458,7 @@ pre span[style*="rgb(129, 136, 152)"], code span[style*="rgb(129, 136, 152)"],
     line-height: 1.4 !important;
     padding: 12px !important;
 }
+fieldset span.pointer-events-none.select-none.absolute { color: var(--metin-placeholder) !important; }
 .ProseMirror p.is-editor-empty:first-child:before {
     color: var(--metin-placeholder) !important;
     content: attr(data-placeholder) !important;
@@ -486,12 +539,15 @@ div[class*="bg-bg-000"] {
 
 /* ========== YAZI TİPİ VE KALINLIK ========== */
 .font-claude-response, .font-claude-response-body,
-.font-user-message, .ProseMirror { font-family: var(--f-govde) !important; }
+.font-user-message, .ProseMirror,
+[data-testid="assistant-message"] .prose, [data-testid="user-message"] { font-family: var(--f-govde) !important; }
 pre, code, .code-block__code { font-family: var(--f-kod) !important; }
 /* Kalın yazı yok: kalın ve başlıklar normal kalınlıkta, rengiyle ayrılır */
 .font-claude-response :is(strong, b, h1, h2, h3, h4, h5, th),
 .font-claude-response-body :is(strong, b, h1, h2, h3, h4, h5, th),
-.font-user-message :is(strong, b) {
+.font-user-message :is(strong, b),
+[data-testid="assistant-message"] .prose :is(strong, b, h1, h2, h3, h4, h5, th),
+[data-testid="user-message"] :is(strong, b) {
     font-weight: 400 !important;
     color: var(--metin-parlak) !important;
 }
@@ -567,9 +623,9 @@ div[class*="attachment"] {
     gozTemasi: true,
     bolgeler: [
       { id: 'sayfa', ad: 'Sayfa geneli', kok: null },
-      { id: 'solmenu', ad: 'Sol menü', kok: 'nav' },
-      { id: 'ust', ad: 'Üst çubuk', kok: 'header' },
-      { id: 'sohbet', ad: 'Sohbet', kok: 'main, .font-claude-response, .font-user-message' },
+      { id: 'solmenu', ad: 'Sol menü', kok: 'aside.dframe-sidebar, nav' },
+      { id: 'ust', ad: 'Üst çubuk', kok: '[data-testid="chat-header"], header' },
+      { id: 'sohbet', ad: 'Sohbet', kok: 'main, [data-testid="assistant-message"], [data-testid="user-message"], .font-claude-response, .font-user-message' },
       { id: 'yazma', ad: 'Yazma kutusu', kok: 'fieldset, .ProseMirror, [contenteditable="true"]' },
       { id: 'dosya', ad: 'Dosya paneli', kok: null },
       { id: 'acilir', ad: 'Açılır pencereler', kok: '[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]' },
@@ -579,16 +635,16 @@ div[class*="attachment"] {
       { id: 'sayfa', bolge: 'sayfa', ad: 'Sayfa (gövde)', secici: 'body', gizlenemez: true },
       { id: 'dugmeler', bolge: 'sayfa', ad: 'Düğmeler (tümü)', secici: 'button' },
       { id: 'linkler', bolge: 'sayfa', ad: 'Bağlantılar (tümü)', secici: 'a' },
-      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '.bg-accent-main-000, .bg-accent-secondary-100, .bg-accent-pro-100' },
-      { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'nav.h-screen' },
-      { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: 'ul.flex.flex-col.gap-px li a' },
-      { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: 'header' },
-      { id: 'baslik', bolge: 'ust', ad: 'Sohbet başlığı', secici: '.font-copernicus' },
-      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '.font-user-message, [data-testid="user-message"]' },
-      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.group.relative.inline-flex.gap-2.bg-bg-300, div:has(> [data-testid="user-message"])' },
-      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '.font-claude-response, .font-claude-response-body, .font-claude-message' },
-      { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: '.font-claude-response code, .font-claude-response-body code' },
-      { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: 'pre, .code-block__code' },
+      { id: 'rozet', bolge: 'sayfa', ad: 'Vurgu rozetleri', secici: '[class*="bg-accent"], [data-cds="Badge"]' },
+      { id: 'solmenu', bolge: 'solmenu', ad: 'Sol menü', secici: 'aside.dframe-sidebar, nav.h-screen' },
+      { id: 'sohbetler', bolge: 'solmenu', ad: 'Sohbet listesi satırları', secici: '.dframe-sidebar .hit-row, ul.flex.flex-col.gap-px li a' },
+      { id: 'ust', bolge: 'ust', ad: 'Üst çubuk', secici: '[data-testid="chat-header"], header' },
+      { id: 'baslik', bolge: 'ust', ad: 'Sohbet başlığı', secici: '[data-testid="chat-header"] h2, h2[aria-label], .font-copernicus' },
+      { id: 'mesaj', bolge: 'sohbet', ad: 'Senin mesajın', secici: '[data-testid="user-message"], .font-user-message' },
+      { id: 'balon', bolge: 'sohbet', ad: 'Mesaj balonu', secici: '.cds-user-message-body, .group.relative.inline-flex.gap-2.bg-bg-300' },
+      { id: 'yanit', bolge: 'sohbet', ad: 'Claude yanıtı', secici: '[data-testid="assistant-message"] .prose, .font-claude-response, .font-claude-response-body, .font-claude-message' },
+      { id: 'satirkod', bolge: 'sohbet', ad: 'Satır içi kod', secici: ':is(.prose, .standard-markdown) code:not(pre code), .font-claude-response code, .font-claude-response-body code' },
+      { id: 'kodblok', bolge: 'sohbet', ad: 'Kod bloğu', secici: '.epitaxy-codeblock, div:has(> pre.code-block__code), pre, .code-block__code' },
       { id: 'dosya', bolge: 'sohbet', ad: 'Dosya ekleri', secici: 'div[class*="attachment"], div[class*="file-upload"]' },
       { id: 'yazma', bolge: 'yazma', ad: 'Yazma alanı', secici: '.ProseMirror' },
       { id: 'model', bolge: 'yazma', ad: 'Model seçici', secici: 'button[data-testid="model-selector-dropdown"], button[data-testid*="model-selector"]' },
