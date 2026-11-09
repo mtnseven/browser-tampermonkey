@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.2.2
+// @version      2.3.0
 // @description  Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai); claude.ai model seçicisi tek pencerede
 // @match        https://claude.ai/*
 // @run-at       document-start
@@ -22,7 +22,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.2.2';
+  const SURUM = '2.3.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -1323,6 +1323,12 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
 .hedef button:last-child { border-radius: 0 4px 4px 0; }
 .hedef button.s { background: var(--p-vurgu); color: var(--p-vurgu-yazi); border-color: var(--p-vurgu); }
 .ornek { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--p-cizgi2); flex: none; }
+.sv-satir { display: flex; gap: 6px; align-items: stretch; }
+.sv-satir .sv { flex: 1; }
+.sv-satir input.parlak { flex: none; width: 16px; min-width: 0; height: 124px; writing-mode: vertical-lr; direction: rtl; }
+.dy-satir { display: flex; gap: 6px; align-items: center; margin-top: 4px; color: var(--p-yazi3); font-size: .9em; }
+.dy-satir span { flex: none; width: 6.5em; }
+.sv:focus-visible, .ton:focus-visible, .lb:focus-visible, .font-dugme:focus-visible { outline: 1px solid var(--p-vurgu); outline-offset: 1px; }
 .sv { position: relative; height: 124px; border-radius: 4px; cursor: crosshair; touch-action: none; border: 1px solid var(--p-cizgi2); }
 .sv .imlec { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; pointer-events: none; }
 .ton { position: relative; height: 12px; margin: 8px 0; border-radius: 6px; cursor: ew-resize; touch-action: none; border: 1px solid var(--p-cizgi2);
@@ -1446,6 +1452,19 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       dug('✎', 'Seçili eklenen nesnenin adını değiştir', nesneAdDegistir),
       dug('×', 'Seçili eklenen nesneyi sil', nesneSil));
     nesneLb = el('div', 'lb'); nesneLb.setAttribute('role', 'listbox'); nesneLb.setAttribute('aria-multiselectable', 'true');
+    // Listeye tıklayınca ↑ ↓ ile önceki / sonraki bölge ya da nesne seçilir (2.3.0)
+    for (const [lb, isaretli] of [[bolgeLb, '.o.a'], [nesneLb, '.o.ana, .o.s']]) {
+      lb.tabIndex = 0;
+      lb.addEventListener('keydown', e => {
+        const y = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+        if (!y) return;
+        e.preventDefault(); e.stopPropagation();
+        const ogeler = [...lb.querySelectorAll('.o')];
+        const i = ogeler.indexOf(lb.querySelector(isaretli));
+        const yeni = ogeler[sinirla(i < 0 ? 0 : i + y, 0, ogeler.length - 1)];
+        if (yeni) { yeni.click(); (lb.querySelector(isaretli) || yeni).scrollIntoView({ block: 'nearest' }); }
+      });
+    }
     lk2.append(b2, nesneLb);
     listeler.append(lk1, lk2);
 
@@ -1577,6 +1596,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
   function ayarCiz() {
     if (!ayarEl) return;
     const kaydirma = ayarEl.scrollTop;
+    // Yeniden çizimde klavye odağı aynı denetimde kalır (ok tuşlarıyla art arda ayar, 2.3.0)
+    const odak = kok && kok.activeElement && kok.activeElement.dataset ? kok.activeElement.dataset.odak : null;
     const sec = seciliNesneler();
     ayarEl.replaceChildren();
     if (!sec.length) {
@@ -1590,6 +1611,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       for (const o of ozler) kutu.icerik.append(satirEl(o, sec));
     }
     ayarEl.scrollTop = kaydirma;
+    if (odak) { const e = ayarEl.querySelector(`[data-odak="${CSS.escape(odak)}"]`); if (e) e.focus({ preventScroll: true }); }
   }
   function grupEl(baslik, destekli, sagIcerik) {
     const g = el('div', 'grup' + (destekli ? '' : ' kilit'));
@@ -1667,12 +1689,21 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     const kap2 = el('div', 'renk-alan');
     const sv = el('div', 'sv'), svI = el('div', 'imlec'); sv.append(svI);
     const ton = el('div', 'ton'), tonI = el('div', 'imlec'); ton.append(tonI);
+    // Noktanın iki ekseni ayrı kaydırıcı: yatay doygunluk, dikey parlaklık (2.3.0)
+    const parlak = el('input', 'parlak'); Object.assign(parlak, { type: 'range', min: 0, max: 100, step: 1, title: 'Parlaklık (↑ ↓)' });
+    const doygun = el('input'); Object.assign(doygun, { type: 'range', min: 0, max: 100, step: 1, title: 'Doygunluk (← →)' });
+    const svSatir = el('div', 'sv-satir'); svSatir.append(sv, parlak);
+    const dySatir = el('div', 'dy-satir'); dySatir.append(el('span', '', 'Doygunluk'), doygun);
+    sv.dataset.odak = 'sv'; ton.dataset.odak = 'ton'; parlak.dataset.odak = 'parlak'; doygun.dataset.odak = 'doygun';
+    sv.tabIndex = 0; sv.title = 'Ok tuşları: ← → doygunluk, ↑ ↓ parlaklık (Shift ile 10)';
+    ton.tabIndex = 0; ton.title = 'Ton: ← → (Shift ile 10)';
     const sat = el('div', 'renk-sat');
     const kip = el('select');
     for (const k of ['HSL', 'RGB', 'HSV']) kip.append(new Option(k, k, false, k === depo.renkKip));
     const k = [0, 1, 2].map(() => { const i = el('input'); i.type = 'number'; return i; });
     const hexI = el('input', 'hex'); hexI.type = 'text'; hexI.spellcheck = false;
     sat.append(kip, ...k, hexI);
+    hexI.dataset.odak = 'hex'; k.forEach((i, j) => { i.dataset.odak = 'k' + j; });
     if (window.EyeDropper) {
       sat.append(dug('⊙', 'Ekrandan renk al', async () => {
         try { const r = await new window.EyeDropper().open(); ayarlaHex(r.sRGBHex, true); } catch (e) { /* vazgeçildi */ }
@@ -1691,6 +1722,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     function boya(kaynak) {
       sv.style.background = `linear-gradient(transparent, #000), linear-gradient(90deg, #fff, hsl(${h}, 100%, 50%))`;
       svI.style.left = (s * 100) + '%'; svI.style.top = ((1 - v) * 100) + '%';
+      parlak.value = Math.round(v * 100); doygun.value = Math.round(s * 100);
       tonI.style.left = (h / 360 * 100) + '%';
       if (kaynak !== 'kutu') kutulariYaz();
       if (kaynak !== 'hex') hexI.value = suAnki();
@@ -1716,6 +1748,23 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     }
     surukle(sv, (x, y) => { s = x; v = 1 - y; });
     surukle(ton, x => { h = x * 359.9; });
+    for (const [kay, fn] of [[parlak, x => { v = x; }], [doygun, x => { s = x; }]]) {
+      kay.addEventListener('input', () => { fn(+kay.value / 100); boya(); degisti(suAnki(), false); });
+      kay.addEventListener('change', () => degisti(suAnki(), true));
+    }
+    // Ok tuşları canlı uygular; tuş bırakılınca geçmişe tek adım yazılır
+    const okTusu = (alan, fn) => {
+      alan.addEventListener('keydown', e => {
+        const y = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+        if (!y) return;
+        e.preventDefault(); e.stopPropagation();
+        fn(y[0] * (e.shiftKey ? 10 : 1), y[1] * (e.shiftKey ? 10 : 1));
+        boya(); degisti(suAnki(), false);
+      });
+      alan.addEventListener('keyup', e => { if (/^Arrow/.test(e.key)) degisti(suAnki(), true); });
+    };
+    okTusu(sv, (dx, dy) => { s = sinirla(s + dx / 100, 0, 1); v = sinirla(v + dy / 100, 0, 1); });
+    okTusu(ton, (dx, dy) => { h = ((h + dx + dy) % 360 + 360) % 360; });
     kip.addEventListener('change', () => { depo.renkKip = kip.value; yaz('renkKip', kip.value); kutulariYaz(); });
     for (const i of k) i.addEventListener('change', () => {
       const d = k.map(x => +x.value || 0);
@@ -1726,9 +1775,11 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       const y = rgbHsv(...rgb); h = y[0]; s = y[1]; v = y[2];
       boya('kutu'); degisti(suAnki(), true);
     });
+    // Kutulardaki ok tuşu da canlı uygular (2.3.0)
+    for (const i of k) i.addEventListener('input', () => i.dispatchEvent(new Event('change')));
     hexI.addEventListener('input', () => { if (hexRgb(hexI.value)) ayarlaHex(hexI.value, false); });
     hexI.addEventListener('change', () => { if (hexRgb(hexI.value)) ayarlaHex(hexI.value, true); else hexI.value = suAnki(); });
-    kap2.append(sv, ton, sat);
+    kap2.append(svSatir, dySatir, ton, sat);
     boya();
     return kap2;
   }
@@ -1763,11 +1814,25 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
       sayi.placeholder = !isNaN(hesSayi) ? String(Math.round(hesSayi * 100) / 100) : '';
       kaydirici.addEventListener('input', () => { sayi.value = kaydirici.value; yazHepsi(+kaydirici.value, false); });
       kaydirici.addEventListener('change', () => yazHepsi(+kaydirici.value, true));
+      // Ok tuşu canlı uygular, Shift ile 10 adım (2.3.0)
+      const onAdim = (alanEl, e) => {
+        if (!e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+        e.preventDefault();
+        const yon = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1;
+        const taban = alanEl.value === '' ? +kaydirici.value : +alanEl.value;
+        const x = Math.round(sinirla(taban + yon * 10 * oz.adim, oz.min, oz.max) * 1000) / 1000;
+        alanEl.value = x; kaydirici.value = x; sayi.value = x; yazHepsi(x, false);
+      };
+      sayi.addEventListener('keydown', e => onAdim(sayi, e));
+      kaydirici.addEventListener('keydown', e => onAdim(kaydirici, e));
+      sayi.addEventListener('input', () => { if (sayi.value !== '') { kaydirici.value = sinirla(+sayi.value, oz.min, oz.max); yazHepsi(+kaydirici.value, false); } });
+      for (const a of [sayi, kaydirici]) a.addEventListener('keyup', e => { if (/^Arrow/.test(e.key)) yazHepsi(+kaydirici.value, true); });
       sayi.addEventListener('change', () => {
         if (sayi.value === '') { yazHepsi(null, true); return; }
         const x = sinirla(+sayi.value, oz.min, oz.max);
         kaydirici.value = x; yazHepsi(x, true);
       });
+      kaydirici.dataset.odak = ozId + ':k'; sayi.dataset.odak = ozId + ':s';
       alan.append(kaydirici, sayi);
     } else if (oz.tur === 'secim') {
       const s = el('select');
@@ -1782,8 +1847,26 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     } else if (oz.tur === 'anahtar') {
       alan.append(dug(v ? 'Gizli' : 'Görünür', 'Gizle / göster', () => yazHepsi(v ? null : true, true), 'anahtar' + (v ? ' s' : '')));
     } else if (oz.tur === 'font') {
-      const b = dug(v || '— temadan —', 'Yazı tipi seç', () => fontAc(v, ad => yazHepsi(ad, true)), 'font-dugme');
+      const b = dug(v || '— temadan —', 'Yazı tipi seç · ↑ ↓ sıradaki yazı tipi (liste açılmadan), PageUp/PageDown 10, Home/End', () => fontAc(v, ad => yazHepsi(ad, true)), 'font-dugme');
       if (v) b.style.fontFamily = aileYigini(v);
+      b.dataset.odak = ozId + ':f';
+      // Liste kapalıyken ok tuşlarıyla yazı tiplerinde gezinme; tuş bırakılınca geçmişe tek adım (2.3.0)
+      let gezilen = v || null;
+      b.addEventListener('keydown', e => {
+        const adim = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10, Home: -1e6, End: 1e6 }[e.key];
+        if (!adim) return;
+        e.preventDefault(); e.stopPropagation();
+        const liste = [null].concat(suzulmusFontlar().map(f => f.ad));
+        const i = Math.max(0, liste.indexOf(gezilen));
+        gezilen = liste[sinirla(i + adim, 0, liste.length - 1)];
+        b.textContent = gezilen || '— temadan —';
+        b.style.fontFamily = gezilen ? aileYigini(gezilen) : '';
+        yazHepsi(gezilen, false);
+      });
+      b.addEventListener('keyup', e => {
+        if (!/^(Arrow|Page|Home|End)/.test(e.key)) return;
+        sonraYaz('fontGez', () => anlik(`${oz.ad}: ${gezilen || 'temadan'}: ${adlar(ilgili)}`), 600);
+      });
       alan.append(b);
     }
     const sifir = dug('↺', 'Temadaki hâline döndür', () => yazHepsi(null, true), 'sifirla' + (degismis ? ' var' : ''));
@@ -1855,12 +1938,20 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     bas('TANI');
     for (const s of [`Sürüm ${SURUM} · site ${SITE} · profil ${PROFIL.ad}`, `Stil yolu: ${stil.yol}${stil.hata ? ' (' + stil.hata + ')' : ''}`,
       `CSP ihlali: ${cspIhlal.length}${cspIhlal.length ? ' — ' + cspIhlal.slice(-3).map(x => x.yonerge).join(', ') : ''}`,
-      `${KISAYOL}: panel · Ctrl+Z / Ctrl+Shift+Z: geri / ileri`, 'Ctrl+sağ tık: nesne seç · aynı yere tekrar: dıştaki · düz sağ tık: tarayıcının menüsü',
+      `${KISAYOL}: panel · Ctrl+Z / Ctrl+Shift+Z: geri / ileri · Ctrl+S: taslağı kaydet`,
+      'Yazı tipi düğmesi seçiliyken ↑ ↓: sıradaki yazı tipi (PageUp/PageDown 10) · sayı ve kaydırıcıda Shift+ok: 10 adım',
+      'Renk kutusu seçiliyken ← →: doygunluk, ↑ ↓: parlaklık · ton çubuğunda ← →: ton · listede ↑ ↓: önceki / sonraki', 'Ctrl+sağ tık: nesne seç · aynı yere tekrar: dıştaki · düz sağ tık: tarayıcının menüsü',
       'Telefonda: uzun basma = seç · Çoklu düğmesi = birden çok seçim']) o.push(el('div', 'bilgi', s));
     acilirEl.replaceChildren(...o);
   }
 
   let fontSuzgecMetni = '';
+  // Yazı tipi listesi ve ok tuşuyla gezinme aynı süzgeci kullanır
+  function suzulmusFontlar() {
+    const a = fontSuzgecMetni.toLocaleLowerCase('tr');
+    return tumFontlar().filter(f => (depo.fontSuzgec === 'hepsi' || (depo.fontSuzgec === 'astigmat' ? f.astigmat : f.tur === depo.fontSuzgec))
+      && (!a || f.ad.toLocaleLowerCase('tr').includes(a)) && (f.kaynak !== 'sistem' || sistemdeVar(f.ad)));
+  }
   function fontAc(secili, sec) {
     durum.acilir = 'font';
     acilirEl.classList.add('acik');
@@ -1905,9 +1996,7 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
         for (const x of g) if (x.isIntersecting) { const f = fontBilgi(x.target.dataset.ad); if (f) onizlemeYukle(f); gozcu.unobserve(x.target); }
       }, { root: acilirEl }) : null;
       function listeCiz() {
-        const a = fontSuzgecMetni.toLocaleLowerCase('tr');
-        const fl = tumFontlar().filter(f => (depo.fontSuzgec === 'hepsi' || (depo.fontSuzgec === 'astigmat' ? f.astigmat : f.tur === depo.fontSuzgec))
-          && (!a || f.ad.toLocaleLowerCase('tr').includes(a)) && (f.kaynak !== 'sistem' || sistemdeVar(f.ad)));
+        const fl = suzulmusFontlar();
         const ogeler = [dug('— temadan —', '', () => { sec(null); acilirKapat(); }, 'oge' + (!secili ? ' secili' : ''))];
         for (const f of fl.slice(0, 260)) {
           const b = dug('', f.ad, () => { sec(f.ad); acilirKapat(); }, 'oge' + (f.ad === secili ? ' secili' : ''));
@@ -2910,6 +2999,8 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (e.key === 'Escape') { if (secimModuAcik) secimModu(false); if (durum.acilir) acilirKapat(); }
     ctrlAltHazir = (e.key === 'Control' || e.key === 'Alt') && e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey;
     if (!depo.acik || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    // Ctrl+S: panel açıkken taslağı kaydeder (2.3.0)
+    if (e.code === 'KeyS' && !e.shiftKey && taslakSayisi(depo.tema)) { e.preventDefault(); e.stopPropagation(); taslakKaydet(); return; }
     const z = e.code === 'KeyZ', y = e.code === 'KeyY' && !e.shiftKey;
     if (!z && !y) return;
     // Yazı kutusundaki Ctrl+Z sayfanın kendi geri alması kalır

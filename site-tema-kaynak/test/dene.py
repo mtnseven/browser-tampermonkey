@@ -289,6 +289,7 @@ with sync_playwright() as p:
     if t3h: print('   ', t3h[:3])
     # claude.ai'nin 11.2026 yapısı (cds/df değişkenleri; tarama 09.11.2026): göz teması renkleri
     yd = b.new_page(viewport={'width': 1200, 'height': 700})
+    yd.on('dialog', lambda d: d.accept())
     yd.add_init_script(SHIM + betik); yd.goto(KOK + 'yeni_dom.html'); yd.wait_for_timeout(500)
     def yd_rgb(n):
         h = yd.evaluate(f"getComputedStyle(document.documentElement).getPropertyValue('{n}').trim()").lstrip('#')
@@ -305,5 +306,37 @@ with sync_playwright() as p:
     yd.evaluate("__dinle['claude.ai:kullanici']('claude.ai:kullanici', null, {temalar: {'Kağıt (açık)': {degerler: {'--zemin-ana': '#102030'}, nesneler: {}}}}, true)"); yd.wait_for_timeout(150)
     kontrol('baska sekmedeki renk degisikligi geldi', css(yd, 'main', 'backgroundColor') == 'rgb(16, 32, 48)')
     kontrol('yeni yapi mesaj kutusu boyanmadi', css(yd, '[aria-label="Mesaj 1/2"]', 'backgroundColor') == 'rgba(0, 0, 0, 0)')
+    # 2.3.0: renk noktasının iki ekseni ayrı kaydırıcı, ok tuşları, odak korunur
+    yd.keyboard.press('Control+Shift+Y'); yd.wait_for_timeout(200)
+    bolge_tikla(yd, 'Sohbet'); nesne_tikla(yd, 'Mesaj balonu')
+    odak = lambda: yd.evaluate(f"({K}.activeElement || {{dataset:{{}}}}).dataset.odak || ''")
+    kontrol('renk kaydiricilari var', yd.evaluate(f"!!{K}.querySelector('.sv-satir input.parlak') && !!{K}.querySelector('.dy-satir input')"))
+    yd.evaluate(f"const p={K}.querySelector('.parlak'); p.value=30; p.dispatchEvent(new Event('input')); p.dispatchEvent(new Event('change'))"); yd.wait_for_timeout(150)
+    hex1 = yd.evaluate(f"{K}.querySelector('.hex').value")
+    kontrol('parlaklik kaydiricisi rengi degistirdi', css(yd, '.cds-user-message-body', 'backgroundColor') != 'rgb(11, 13, 15)' and yd.evaluate(f"+{K}.querySelector('.parlak').value") == 30)
+    yd.evaluate(f"{K}.querySelector('.sv').focus()")
+    p0 = yd.evaluate(f"+{K}.querySelector('.parlak').value")
+    for _ in range(3): yd.keyboard.press('ArrowUp')
+    yd.wait_for_timeout(150)
+    kontrol('renk kutusunda ok tusu parlaklik', 2 <= yd.evaluate(f"+{K}.querySelector('.parlak').value") - p0 <= 4 and odak() == 'sv')
+    yd.keyboard.press('Shift+ArrowRight'); yd.wait_for_timeout(150)
+    kontrol('shift+ok doygunluk 10', yd.evaluate(f"+{K}.querySelector('.dy-satir input').value") >= 10 and odak() == 'sv')
+    # sayı: Shift+ok 10 adım, odak kalır
+    yd.evaluate(f"[...{K}.querySelectorAll('.satir')].find(x=>x.querySelector('.e').textContent.startsWith('Boyut')).querySelector('input[type=number]').focus()")
+    b0 = float(css(yd, '.cds-user-message-body', 'fontSize')[:-2])
+    yd.keyboard.press('Shift+ArrowUp'); yd.wait_for_timeout(150)
+    b1 = yd.evaluate(f"+[...{K}.querySelectorAll('.satir')].find(x=>x.querySelector('.e').textContent.startsWith('Boyut')).querySelector('input[type=number]').value")
+    kontrol('sayida shift+ok 10 adim', b1 == b0 + 5 and css(yd, '.cds-user-message-body', 'fontSize') == f'{b1:g}px' and odak() == 'boyut:s')
+    # yazı tipi: liste kapalıyken ok tuşuyla gezinme
+    yd.evaluate(f"{K}.querySelector('.font-dugme').focus()")
+    yd.keyboard.press('ArrowDown'); yd.keyboard.press('ArrowDown'); yd.wait_for_timeout(200)
+    fad = yd.evaluate(f"{K}.querySelector('.font-dugme').textContent")
+    kontrol('yazi tipinde ok tusuyla gezinme', fad != '— temadan —' and fad in css(yd, '.cds-user-message-body', 'fontFamily') and odak() == 'aile:f' and not yd.evaluate(f"{K}.querySelector('.acilir.acik')"))
+    # nesne listesinde ok tuşu
+    yd.evaluate(f"{K}.querySelectorAll('.lb')[1].focus()"); yd.keyboard.press('ArrowDown'); yd.wait_for_timeout(150)
+    kontrol('nesne listesinde ok tusu', secim(yd) == ['yanit'])
+    # Ctrl+S taslağı kaydeder
+    yd.evaluate(f"{K}.querySelector('.ayar').focus()"); yd.keyboard.press('Control+s'); yd.wait_for_timeout(600)
+    kontrol('ctrl+s taslagi kaydetti', not yd.evaluate(f"!!{K}.querySelector('.taslak.acik')") and 'Kağıt (açık)' in yd.evaluate("Object.keys((__depo['claude.ai:kullanici'] || {temalar:{}}).temalar)"))
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))
