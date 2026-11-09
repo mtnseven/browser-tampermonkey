@@ -6,7 +6,7 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 
 | Betik | Sürüm | Ne yapar | Kurulum |
 |---|---|---|---|
-| Site Tema | 2.1.2 | Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai). Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
+| Site Tema | 2.2.0 | Sitelere göz teması ve canlı ayar paneli (şimdilik claude.ai). Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
 | Proje Ağacı | 0.2.4 | claude.ai/code sohbet listesini başlıktaki proje emojisine göre klasörlere ayırır; klasör içinde en yeni üstte, emojisiz sohbetler Projesiz'de. Arşivli sohbetler, arama (#etiket), filtreler, açık sohbete yeşil nokta, klasör satırındaki ↵ ile o klasörde uzun adları alt satıra sarma. Yalnız bilgisayar | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/proje-agaci.user.js) |
 | Makro Menü | 8.2 | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir. Dişli düğme sürüklenir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | 3.4 | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
@@ -24,6 +24,7 @@ Panel tek ayar yeridir. Altta iki liste vardır: solda bölge (Sol menü, Sohbet
 | Birden çok nesne | Listede `Ctrl+tık`; telefonda **Çoklu** düğmesi. Seçilenler etiket olarak görünür, × seçimden çıkarır |
 | Listede olmayan nesne | Sayfada `Ctrl+sağ tık` ya da Nesne başlığındaki **+**; ad verilir, kendi bölgesine eklenir |
 | Geri / ileri | `Ctrl+Z` / `Ctrl+Shift+Z`; **Geçmiş** son 50 adımı listeler, yenilemede kalır |
+| Kaydet | Değişiklik önce taslaktır, kayıtlı tema değişmez. Başlığın altındaki satır: **Kaydet** üzerine yazar, **Farklı kaydet** yeni tema açar, **Vazgeç** taslağı siler. Listede ● taslağı olan temadır; ☰ → Fabrika ayarına dön hazır temayı ilk hâline getirir |
 | Temalar | Sayfa: Göz, Gece mavisi, Grafit, Kağıt (açık), Orijinal. Panel: Gece, Grafit, Lacivert, Orman, Kağıt (açık), Sis (açık) — ☰ menüsünde |
 | Ayar taşıma | ☰ → Dosyaya kaydet / Dosyadan yükle (Claude Tema dosyası da okunur) |
 | Sayfa taraması | ☰ → Sayfayı tara (birkaç ekranda) → Tarama dosyasını kaydet |
