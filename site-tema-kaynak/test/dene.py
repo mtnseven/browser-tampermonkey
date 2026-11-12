@@ -8,7 +8,7 @@ BETIK, KOK, OUT = sys.argv[1], sys.argv[2].rstrip('/') + '/', sys.argv[3]
 betik = open(BETIK, encoding='utf-8').read()
 SHIM = """
 window.__ST_SITE = 'claude.ai';
-window.__depo = JSON.parse(sessionStorage.getItem('__depo') || '{}');
+window.__depo = JSON.parse(sessionStorage.getItem('__depo') || '{"paletSecili":"G\u00f6z"}');
 window.GM_getValue = (k, v) => k in __depo ? JSON.parse(JSON.stringify(__depo[k])) : v;
 window.GM_setValue = (k, v) => { __depo[k] = JSON.parse(JSON.stringify(v)); sessionStorage.setItem('__depo', JSON.stringify(__depo)); };
 window.GM_registerMenuCommand = () => {};
@@ -60,7 +60,7 @@ with sync_playwright() as p:
         # nesne seç, zemin canlı değişsin
         bolge_tikla(s, 'Sohbet'); nesne_tikla(s, 'Mesaj balonu')
         kontrol(t + 'liste ile secim', secim(s) == ['balon'])
-        s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#203040'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
+        s.evaluate(f"const h={K}.querySelector('[data-renk=zemin] .hex'); h.value='#203040'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         kontrol(t + 'zemin canli degisti', css(s, '.bg-bg-300', 'backgroundColor') == 'rgb(32, 48, 64)')
         nesne_tikla(s, 'Claude yanıtı', ctrl=True)
         kontrol(t + 'ctrl+tik coklu secim', secim(s) == ['balon', 'yanit'])
@@ -87,13 +87,13 @@ with sync_playwright() as p:
         yeni = s.evaluate("(__depo['claude.ai:kullanici'] || {}).ozelNesneler || []")
         kontrol(t + 'ad onerisi sayfa yazisi degil', oneriler and 'sabit öğe' not in oneriler[-1] and 'div' in oneriler[-1])
         kontrol(t + 'yeni nesne eklendi ve secildi', len(yeni) == 1 and yeni[0]['ad'] == 'Sabit kutu' and secim(s) == [yeni[0]['id']])
-        s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#405060'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
+        s.evaluate(f"const h={K}.querySelector('[data-renk=zemin] .hex'); h.value='#405060'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         kontrol(t + 'yeni nesne canli boyandi', css(s, '.sabit', 'backgroundColor') == 'rgb(64, 80, 96)')
-        # tema rengi nesnesi; Yazı grubu kilitli
+        # tema rengi nesnesi: yalnız RENK bölümü (2.6.0)
         bolge_tikla(s, 'Sayfa geneli')
         s.evaluate(f"[...{K}.querySelectorAll('.lb .o')].find(x => x.textContent.includes('tüm sayfanın ana arka planı')).click()"); s.wait_for_timeout(80)
-        kontrol(t + 'tema rengi nesnesinde yazi kilitli', s.evaluate(f"[...{K}.querySelectorAll('.grup')][1].classList.contains('kilit')"))
-        s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#101418'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
+        kontrol(t + 'tema rengi nesnesinde yalniz renk bolumu', s.evaluate(f"[...{K}.querySelectorAll('.grup')].map(g => g.dataset.renk || '').join()") == 'zemin')
+        s.evaluate(f"const h={K}.querySelector('[data-renk=zemin] .hex'); h.value='#101418'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         kontrol(t + 'tema rengi canli', css(s, 'body', 'backgroundColor') == 'rgb(16, 20, 24)')
         # sayfa teması ve panel teması
         s.evaluate(f"const t={K}.querySelector('.cubuk select'); t.value='Kağıt (açık)'; t.dispatchEvent(new Event('change'))"); s.wait_for_timeout(150)
@@ -133,11 +133,11 @@ with sync_playwright() as p:
         kontrol(t + 'taslak satiri gorunur, kayit degismedi', taslak_acik() and 'Göz' not in kayitli())
         taslak_dug('Kaydet'); s.wait_for_timeout(500)
         kontrol(t + 'kaydet temaya yazdi', not taslak_acik() and 'Göz' in kayitli() and css(s, 'body', 'backgroundColor') == 'rgb(16, 20, 24)')
-        s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#223344'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
+        s.evaluate(f"const h={K}.querySelector('[data-renk=zemin] .hex'); h.value='#223344'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         kontrol(t + 'yeni degisiklik taslakta', taslak_acik() and css(s, 'body', 'backgroundColor') == 'rgb(34, 51, 68)')
         taslak_dug('Vazgeç'); s.wait_for_timeout(150)
         kontrol(t + 'vazgec kayitli hale dondu', not taslak_acik() and css(s, 'body', 'backgroundColor') == 'rgb(16, 20, 24)')
-        s.evaluate(f"const h={K}.querySelector('.hex'); h.value='#223344'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
+        s.evaluate(f"const h={K}.querySelector('[data-renk=zemin] .hex'); h.value='#223344'; h.dispatchEvent(new Event('change'))"); s.wait_for_timeout(120)
         diyalog['cevap'] = 'Göz deneme'
         taslak_dug('Farklı kaydet'); s.wait_for_timeout(500)
         kontrol(t + 'farkli kaydet yeni tema', s.evaluate(f"{K}.querySelector('.cubuk select').value") == 'Göz deneme' and css(s, 'body', 'backgroundColor') == 'rgb(34, 51, 68)' and not taslak_acik())
@@ -318,17 +318,17 @@ with sync_playwright() as p:
     yd.keyboard.press('Control+Shift+Y'); yd.wait_for_timeout(200)
     bolge_tikla(yd, 'Sohbet'); nesne_tikla(yd, 'Mesaj balonu')
     odak = lambda: yd.evaluate(f"({K}.activeElement || {{dataset:{{}}}}).dataset.odak || ''")
-    kontrol('renk kaydiricilari var', yd.evaluate(f"!!{K}.querySelector('.sv-satir input.parlak') && !!{K}.querySelector('.dy-satir input')"))
-    yd.evaluate(f"const p={K}.querySelector('.parlak'); p.value=30; p.dispatchEvent(new Event('input')); p.dispatchEvent(new Event('change'))"); yd.wait_for_timeout(150)
-    hex1 = yd.evaluate(f"{K}.querySelector('.hex').value")
-    kontrol('parlaklik kaydiricisi rengi degistirdi', css(yd, '.cds-user-message-body', 'backgroundColor') != 'rgb(11, 13, 15)' and yd.evaluate(f"+{K}.querySelector('.parlak').value") == 30)
-    yd.evaluate(f"{K}.querySelector('.sv').focus()")
-    p0 = yd.evaluate(f"+{K}.querySelector('.parlak').value")
+    kontrol('renk kaydiricilari var', yd.evaluate(f"!!{K}.querySelector('.sv-satir input.parlak') && !!{K}.querySelector('[data-renk=zemin] .dy-satir input')"))
+    yd.evaluate(f"const p={K}.querySelector('[data-renk=zemin] .parlak'); p.value=30; p.dispatchEvent(new Event('input')); p.dispatchEvent(new Event('change'))"); yd.wait_for_timeout(150)
+    hex1 = yd.evaluate(f"{K}.querySelector('[data-renk=zemin] .hex').value")
+    kontrol('parlaklik kaydiricisi rengi degistirdi', css(yd, '.cds-user-message-body', 'backgroundColor') != 'rgb(11, 13, 15)' and yd.evaluate(f"+{K}.querySelector('[data-renk=zemin] .parlak').value") == 30)
+    yd.evaluate(f"{K}.querySelector('[data-renk=zemin] .sv').focus()")
+    p0 = yd.evaluate(f"+{K}.querySelector('[data-renk=zemin] .parlak').value")
     for _ in range(3): yd.keyboard.press('ArrowUp')
     yd.wait_for_timeout(150)
-    kontrol('renk kutusunda ok tusu parlaklik', 2 <= yd.evaluate(f"+{K}.querySelector('.parlak').value") - p0 <= 4 and odak() == 'sv')
+    kontrol('renk kutusunda ok tusu parlaklik', 2 <= yd.evaluate(f"+{K}.querySelector('[data-renk=zemin] .parlak').value") - p0 <= 4 and odak() == 'zemin:sv')
     yd.keyboard.press('Shift+ArrowRight'); yd.wait_for_timeout(150)
-    kontrol('shift+ok doygunluk 10', yd.evaluate(f"+{K}.querySelector('.dy-satir input').value") >= 10 and odak() == 'sv')
+    kontrol('shift+ok doygunluk 10', yd.evaluate(f"+{K}.querySelector('[data-renk=zemin] .dy-satir input').value") >= 10 and odak() == 'zemin:sv')
     # sayı: Shift+ok 10 adım, odak kalır
     yd.evaluate(f"[...{K}.querySelectorAll('.satir')].find(x=>x.querySelector('.e').textContent.startsWith('Boyut')).querySelector('input[type=number]').focus()")
     b0 = float(css(yd, '.cds-user-message-body', 'fontSize')[:-2])
@@ -361,9 +361,9 @@ with sync_playwright() as p:
             yd.evaluate("document.querySelectorAll('[data-testid=\"file-thumbnail\"], [data-cds=\"MessageAttachmentsFile\"], [data-cds=\"MessageAttachmentsImage\"]').length") == 2)
     bolge_tikla(yd, 'Sohbet'); nesne_tikla(yd, 'Dosya ekleri')
     kontrol('dosya ekleri listede uyarisiz', yd.evaluate(f"[...{K}.querySelectorAll('.lb .o')].some(x => x.textContent.includes('Dosya ekleri') && !x.textContent.includes('⚠'))"))
-    yd.evaluate(f"(() => {{ const h = {K}.querySelector('.hex'); h.value = '#123456'; h.dispatchEvent(new Event('change')); }})()"); yd.wait_for_timeout(200)
+    yd.evaluate(f"(() => {{ const h = {K}.querySelector('[data-renk=zemin] .hex'); h.value = '#123456'; h.dispatchEvent(new Event('change')); }})()"); yd.wait_for_timeout(200)
     bolge_tikla(yd, 'Sayfa geneli'); nesne_tikla(yd, 'Vurgu rozetleri')
-    yd.evaluate(f"(() => {{ const h = {K}.querySelector('.hex'); h.value = '#654321'; h.dispatchEvent(new Event('change')); }})()"); yd.wait_for_timeout(200)
+    yd.evaluate(f"(() => {{ const h = {K}.querySelector('[data-renk=zemin] .hex'); h.value = '#654321'; h.dispatchEvent(new Event('change')); }})()"); yd.wait_for_timeout(200)
     kontrol('dosya eki ve rozet boyandi, dugme katmani degil', css(yd, '#ek1', 'backgroundColor') == 'rgb(18, 52, 86)' and css(yd, '#ek2', 'backgroundColor') == 'rgb(18, 52, 86)'
             and css(yd, '#rz', 'backgroundColor') == 'rgb(101, 67, 33)' and css(yd, '#basili', 'backgroundColor') != 'rgb(101, 67, 33)')
     # nesne listesinde ok tuşu
@@ -386,11 +386,17 @@ with sync_playwright() as p:
     kontrol('goc secili tema ve gorunum', gc.evaluate("__depo['paletSecili']") == 'Benim' and css(gc, 'main', 'backgroundColor') == 'rgb(34, 51, 68)')
     gc.evaluate("__depo['paletSecili'] = 'Göz'; sessionStorage.setItem('__depo', JSON.stringify(__depo))"); gc.reload(); gc.wait_for_timeout(500)
     kontrol('goc sonrasi Göz ayarlari', css(gc, 'main', 'backgroundColor') == 'rgb(17, 34, 51)' and css(gc, '.cds-user-message-body', 'backgroundColor') == 'rgb(68, 85, 102)')
+    # 2.6.0: yeni cihaz Göz 3 ile açılır; Göz 3'ün claude.ai nesne ayarı betikte
+    g3 = b.new_page(viewport={'width': 1200, 'height': 700})
+    g3.add_init_script("sessionStorage.setItem('__depo', '{}');" + SHIM + betik); g3.goto(KOK + 'sahte.html'); g3.wait_for_timeout(400)
+    kontrol('yeni cihaz Goz 3', g3.evaluate(f"{K}.querySelector('.cubuk select').value") == 'Göz 3' and css(g3, 'nav.h-screen', 'backgroundColor') == 'rgb(6, 3, 15)'
+            and css(g3, 'li a', 'color') == 'rgb(208, 123, 181)' and not g3.evaluate(f"{K}.querySelector('.cubuk select').title").count('yalnız bu cihazda'))
+    g3.close()
     # 2.5.0 (0026 3b): el yapımı haritası olmayan açık renkli site; otomatik + genel harita
     print('== sahte_genel.html')
     SHIM_G = SHIM.replace("'claude.ai'", "'ornek.com'")
     gn = b.new_context(viewport={'width': 1200, 'height': 700}).new_page()
-    g_hata = []; gn.on('pageerror', lambda e: g_hata.append(str(e)))
+    g_hata = []; gn.on('pageerror', lambda e: g_hata.append(str(e))); g_cevap = ['']
     gn.add_init_script(SHIM_G + betik); gn.goto(KOK + 'sahte_genel.html'); gn.wait_for_timeout(800)
     isaret = lambda sec, a: gn.evaluate(f"document.querySelector({json.dumps(sec)}).getAttribute({json.dumps(a)})")
     kontrol('genel: panel ve goz temasi', gn.evaluate("!!document.querySelector('st-kok')") and css(gn, 'body', 'backgroundColor') == 'rgb(0, 0, 0)' and not g_hata)
@@ -411,9 +417,71 @@ with sync_playwright() as p:
     gn.evaluate(f"""(() => {{ const i = [...{K}.querySelectorAll('.satir')].find(x => x.querySelector('.e').textContent.startsWith('Boyut')).querySelector('input[type=number]');
       i.value = 21; i.dispatchEvent(new Event('change')); }})()"""); gn.wait_for_timeout(200)
     kontrol('genel: rol nesnesine ince ayar', css(gn, '#kart', 'fontSize') == '21px' and css(gn, '#ayni', 'fontSize') != '21px')
+    # 2.6.0: Bağlantılar (tümü) → Yazı rengi; Google'da otomatik haritanın işareti nesne rengini eziyordu
+    gn.on('dialog', lambda d: d.accept(g_cevap[0]) if d.type == 'prompt' else d.accept())
+    bolge_tikla(gn, 'Sayfa geneli'); nesne_tikla(gn, 'Bağlantılar (tümü)')
+    kontrol('genel: oge bolumleri yazi zemin cerceve', gn.evaluate(f"[...{K}.querySelectorAll('.grup')].map(g => g.dataset.renk).join()") == 'yazi,zemin,cerceve')
+    bol = lambda b: gn.evaluate(f"[...{K}.querySelectorAll('[data-renk={b}] .satir .e')].map(e => e.textContent.replace(/ ≠$/, '')).join('|')")
+    kontrol('genel: bolum ayarlari ayrik', 'Yazı tipi' in bol('yazi') and 'Köşe' not in bol('yazi') and 'İç boşluk' in bol('zemin') and 'Saydamlık' in bol('zemin')
+            and bol('cerceve') == 'Çizgi kalınlığı|Çizgi türü')
+    kontrol('genel: her bolumde renk secici', gn.evaluate(f"{K}.querySelectorAll('.grup .sv').length") == 3 and gn.evaluate(f"{K}.querySelectorAll('[data-renk=cerceve] .ornek-sat').length") >= 1)
+    gn.evaluate(f"const h={K}.querySelector('[data-renk=yazi] .hex'); h.value='#ff8800'; h.dispatchEvent(new Event('change'))"); gn.wait_for_timeout(200)
+    kontrol('genel: baglanti yazi rengi isaretli ogeyi de boyadi', isaret('#menulink', 'data-st-y') == 'ana' and css(gn, '#menulink', 'color') == 'rgb(255, 136, 0)'
+            and isaret('#kutuyazi', 'data-st-y') == 'ana' and css(gn, '#kutuyazi', 'color') == 'rgb(255, 136, 0)' and css(gn, '#satirlink', 'color') == 'rgb(255, 136, 0)')
+    gn.evaluate(f"const h={K}.querySelector('[data-renk=cerceve] .hex'); h.value='#00ff00'; h.dispatchEvent(new Event('change'))"); gn.wait_for_timeout(200)
+    kontrol('genel: cerceve rengi yazidan ayri', css(gn, '#kutulink', 'borderTopColor') == 'rgb(0, 255, 0)' and css(gn, '#kutuyazi', 'color') == 'rgb(255, 136, 0)')
+    # Bilgi Kartı: varsayılan kapalı, tıklayınca açılır
+    menu_ac = lambda: gn.evaluate(f"[...{K}.querySelectorAll('.cubuk button')].find(b=>b.textContent==='☰').click()")
+    menu_ac(); gn.wait_for_timeout(100)
+    kapali_kart = gn.evaluate(f"!{K}.querySelector('.bilgi-kart') && !!{K}.querySelector('.bk-bas')")
+    gn.evaluate(f"{K}.querySelector('.bk-bas').click()"); gn.wait_for_timeout(100)
+    kontrol('genel: bilgi karti kapali, tiklayinca acildi', kapali_kart and 'Oto harita' in gn.evaluate(f"{K}.querySelector('.bilgi-kart').textContent")
+            and 'OTOMATİK HARİTA' not in gn.evaluate(f"{K}.querySelector('.acilir').textContent"))
+    gn.screenshot(path=f'{OUT}/v26_bilgi_karti.png')
+    # panel teması: kopyala, adını değiştir, kaldır
+    g_cevap = ['Benim panel']
+    zemin0 = gn.evaluate(f"getComputedStyle({K}.querySelector('.panel')).backgroundColor")
+    gn.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent.startsWith('Yeni panel teması')).click()"); gn.wait_for_timeout(500)
+    kontrol('genel: panel temasi kopyalandi', gn.evaluate("__depo['panelTema']") == 'Benim panel' and 'Benim panel' in gn.evaluate("__depo['panelTemalar']")
+            and gn.evaluate(f"getComputedStyle({K}.querySelector('.panel')).backgroundColor") == zemin0)
+    g_cevap = ['Benim 2']
+    gn.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent.startsWith('Panel temasının adını')).click()"); gn.wait_for_timeout(500)
+    kontrol('genel: panel temasi adi degisti', gn.evaluate("__depo['panelTema']") == 'Benim 2' and list(gn.evaluate("__depo['panelTemalar']").keys()) == ['Benim 2'])
+    gn.evaluate(f"[...{K}.querySelectorAll('.acilir .oge')].find(b=>b.textContent.startsWith('Panel temasını listeden')).click()"); gn.wait_for_timeout(500)
+    kontrol('genel: panel temasi kaldirildi', gn.evaluate("__depo['panelTema']") == 'Gece' and gn.evaluate("__depo['panelTemalar']") == {})
+    gn.keyboard.press('Escape'); gn.wait_for_timeout(100)
+    # Geçmişi Temizle
+    gn.evaluate(f"[...{K}.querySelectorAll('.cubuk button')].find(b=>b.textContent==='Geçmiş').click()"); gn.wait_for_timeout(100)
+    adim0 = gn.evaluate(f"{K}.querySelectorAll('.acilir .oge').length")
+    gn.evaluate(f"[...{K}.querySelectorAll('.acilir button')].find(b=>b.textContent==='Geçmişi temizle').click()"); gn.wait_for_timeout(700)
+    kontrol('genel: gecmis temizlendi', adim0 > 3 and gn.evaluate(f"{K}.querySelectorAll('.acilir .oge').length") == 1
+            and len(gn.evaluate("__depo['ornek.com:gecmis'].liste")) == 1 and css(gn, '#menulink', 'color') == 'rgb(255, 136, 0)')
+    gn.keyboard.press('Escape'); gn.wait_for_timeout(100)
+    # Fav-font: ☆ → ★, favori listenin başına
+    gn.evaluate(f"{K}.querySelector('[data-renk=yazi] .font-dugme').click()"); gn.wait_for_timeout(200)
+    fav = gn.evaluate(f"(() => {{ const o = [...{K}.querySelectorAll('.font-liste .oge')][6]; o.querySelector('.yildiz').click(); return [o.dataset.ad, o.querySelector('.yildiz').textContent]; }})()")
+    acik_kaldi = gn.evaluate(f"!!{K}.querySelector('.acilir.acik')")
+    gn.keyboard.press('Escape'); gn.wait_for_timeout(100)
+    gn.evaluate(f"{K}.querySelector('[data-renk=yazi] .font-dugme').click()"); gn.wait_for_timeout(200)
+    ilk = gn.evaluate(f"[...{K}.querySelectorAll('.font-liste .oge')][1].dataset.ad")
+    kontrol('genel: fav font yildizi ve sirasi', fav[1] == '★' and acik_kaldi and gn.evaluate("__depo['favFontlar']") == [fav[0]] and ilk == fav[0])
+    gn.keyboard.press('Escape'); gn.wait_for_timeout(100)
     gn.evaluate("__depo['paletSecili'] = 'Orijinal'"); gn.evaluate("__dinle['paletSecili']('paletSecili', 'Göz', 'Orijinal', true)"); gn.wait_for_timeout(300)
     kontrol('genel: Orijinal temada site renkleri', css(gn, 'body', 'backgroundColor') == 'rgb(255, 255, 255)' and css(gn, '#ust', 'backgroundColor') == 'rgb(238, 238, 238)')
     gn.evaluate("__depo['ornek.com:kapali'] = true; sessionStorage.setItem('__depo', JSON.stringify(__depo))"); gn.reload(); gn.wait_for_timeout(700)
-    kontrol('genel: bu sitede kapali', not gn.evaluate("!!document.querySelector('st-kok')") and css(gn, 'body', 'backgroundColor') == 'rgb(255, 255, 255)' and gn.evaluate("document.querySelectorAll('[data-st-z],[data-st-y]').length") == 0)
+    kontrol('genel: bu sitede kapali, dugme kaldi', gn.evaluate("!!document.querySelector('st-kok')") and css(gn, 'body', 'backgroundColor') == 'rgb(255, 255, 255)'
+            and gn.evaluate("document.querySelectorAll('[data-st-z],[data-st-y]').length") == 0 and gn.evaluate(f"{K}.querySelector('.dugme').classList.contains('kapali')"))
+    gn.evaluate("__depo['paletSecili'] = 'Göz'; sessionStorage.setItem('__depo', JSON.stringify(__depo))"); gn.reload(); gn.wait_for_timeout(700)
+    dg = gn.evaluate(f"(() => {{ const r = {K}.querySelector('.dugme').getBoundingClientRect(); return [r.left + 10, r.top + 10]; }})()")
+    acik0 = gn.evaluate("document.documentElement.classList.contains('st-acik')")
+    gn.mouse.dblclick(dg[0], dg[1]); gn.wait_for_timeout(1300)
+    kontrol('genel: cift tik temayi acti, yenilenmedi', css(gn, 'body', 'backgroundColor') == 'rgb(0, 0, 0)' and isaret('#kart', 'data-st-z') == 'kutu'
+            and gn.evaluate("__depo['ornek.com:kapali']") is False and gn.evaluate("document.documentElement.classList.contains('st-acik')") == acik0)
+    gn.mouse.dblclick(dg[0], dg[1]); gn.wait_for_timeout(500)
+    kontrol('genel: cift tik temayi kapatti', css(gn, 'body', 'backgroundColor') == 'rgb(255, 255, 255)' and gn.evaluate("__depo['ornek.com:kapali']") is True)
+    gn.mouse.click(dg[0], dg[1]); gn.wait_for_timeout(600)
+    kontrol('genel: tek tik paneli acti', gn.evaluate("document.documentElement.classList.contains('st-acik')") != acik0)
+    kontrol('genel: kapali notu', gn.evaluate(f"!!{K}.querySelector('.kapali-not')"))
+    kontrol('genel: kapali-acik hatasiz', not g_hata)
     b.close()
 print('SONUC:', sum(sonuc.values()), '/', len(sonuc))

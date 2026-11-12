@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Tema · panel önizleme</title>
+<!--
+  PANEL TASARIM ÖNİZLEMESİ (2.6.0)
+  Ne yapar: derlenmiş site-tema.user.js'i sahte bir sayfada çalıştırır,
+  paneli açık gösterir ve panel.css'i her saniye yeniden okur.
+  panel.css'i kaydettiğin anda panel yeni görünümle çizilir;
+  derleme gerekmez.
+  Nasıl açılır: bu dosya bir yerel sunucudan açılmalıdır (VS Code
+  Live Preview ya da "python -m http.server"); dosyaya çift tıkla
+  açılırsa panel.css okunamaz.
+  Kayıtlar yalnız bu sekmede tutulur (sessionStorage); gerçek
+  Tampermonkey ayarlarına dokunmaz.
+-->
+<style>
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: #f5f4ef; color: #29261b; }
+  .ust { padding: 10px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 10px; align-items: center; }
+  .ust b { margin-right: auto; }
+  .ust button { font: inherit; padding: 4px 10px; }
+  nav.h-screen { position: fixed; left: 0; top: 48px; bottom: 0; width: 200px; background: #efeee8; border-right: 1px solid #ddd; padding: 10px; }
+  nav ul { list-style: none; margin: 0; padding: 0; }
+  nav a { display: block; color: inherit; text-decoration: none; padding: 4px 0; }
+  main { margin-left: 220px; padding: 16px 24px; max-width: 760px; }
+  .bg-bg-300 { display: inline-flex; background: #e8e6dc; padding: 8px 12px; border-radius: 16px; }
+  pre { background: #fff; padding: 10px; border-radius: 8px; }
+  .durum { font-size: 12px; color: #777; }
+</style>
+</head>
+<body>
+<div class="ust">
+  <b>Panel önizleme</b>
+  <span class="durum" id="durum">panel.css bekleniyor…</span>
+  <button id="sifirla" title="Önizlemenin kayıtlarını sil, baştan aç">Sıfırla</button>
+</div>
+<nav class="h-screen"><ul class="flex flex-col gap-px"><li><a href="#">Sohbet bir</a></li><li><a href="#">Sohbet iki</a></li><li><a href="#">Sohbet üç</a></li></ul></nav>
+<main>
+  <h2 class="font-copernicus">Örnek sohbet</h2>
+  <div class="group relative inline-flex gap-2 bg-bg-300"><span class="font-user-message">Paneli nasıl değiştiririm?</span></div>
+  <div class="font-claude-response">
+    <p>panel.css dosyasını düzenle ve kaydet; bu sayfa bir saniye içinde yeni görünümü gösterir. <a href="#">Örnek bağlantı</a> ve <code>satır içi kod</code>.</p>
+    <pre><code>.panel { width: 380px; }</code></pre>
+  </div>
+  <div class="ProseMirror" contenteditable="true" style="border:1px solid #ccc;border-radius:12px;padding:10px;background:#fff">Yazma kutusu</div>
+  <p><button data-testid="model-selector-dropdown">Model</button></p>
+</main>
+
+<script>
+  // Tampermonkey'in GM_ işlevlerinin sahtesi; ilk açılışta panel açık, bir nesne seçili
+  (function () {
+    const ILK = { panelAcik: true, panelGenislik: 420, 'claude.ai:secim': ['balon'], 'claude.ai:bolge': 'sohbet' };
+    window.__ST_SITE = 'claude.ai';
+    let depo;
+    try { depo = JSON.parse(sessionStorage.getItem('onizleme-depo') || 'null') || ILK; } catch (e) { depo = ILK; }
+    const sakla = () => { try { sessionStorage.setItem('onizleme-depo', JSON.stringify(depo)); } catch (e) { /* yalnız bellekte */ } };
+    window.GM_getValue = (k, v) => k in depo ? JSON.parse(JSON.stringify(depo[k])) : v;
+    window.GM_setValue = (k, v) => { depo[k] = JSON.parse(JSON.stringify(v)); sakla(); };
+    window.GM_listValues = () => Object.keys(depo);
+    window.GM_registerMenuCommand = () => {};
+    window.GM_addValueChangeListener = () => {};
+    window.GM_setClipboard = t => navigator.clipboard && navigator.clipboard.writeText(t).catch(() => {});
+    window.GM_xmlhttpRequest = o => fetch(o.url).then(async r => {
+      const response = o.responseType === 'arraybuffer' ? await r.arrayBuffer() : undefined;
+      o.onload && o.onload({ status: r.status, response, responseText: response ? '' : await r.text() });
+    }).catch(() => o.onerror && o.onerror());
+    document.getElementById('sifirla').onclick = () => { sessionStorage.removeItem('onizleme-depo'); location.reload(); };
+  })();
+</script>
+<script src="../site-tema.user.js"></script>
+<script>
+  // panel.css'i her saniye okur; değiştiyse panelin stilini onunla değiştirir
+  (function () {
+    const durum = document.getElementById('durum');
+    let son = '';
+    async function yenile() {
+      let css;
+      try {
+        const r = await fetch('panel.css?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        css = await r.text();
+      } catch (e) {
+        durum.textContent = 'panel.css okunamadı (' + e.message + '); sayfayı yerel sunucudan aç';
+        return;
+      }
+      if (css === son) return;
+      const host = document.querySelector('st-kok');
+      if (!host || !host.shadowRoot) return;
+      try {
+        const s = new CSSStyleSheet();
+        s.replaceSync(css);
+        host.shadowRoot.adoptedStyleSheets = [s];
+        son = css;
+        durum.textContent = 'panel.css yüklendi · ' + new Date().toLocaleTimeString('tr-TR');
+      } catch (e) {
+        durum.textContent = 'panel.css hatalı: ' + e.message;
+      }
+    }
+    setInterval(yenile, 1000);
+    setTimeout(yenile, 300);
+  })();
+</script>
+</body>
+</html>

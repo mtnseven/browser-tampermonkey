@@ -43,9 +43,14 @@ js = js.replace('/*@KURALLAR@*/', kurallar)
 # Otomatik site haritası (0026 3b) ayrı dosyada; gerçek sayfaya tek başına da enjekte edilir
 oto = open(os.path.join(os.path.dirname(os.path.abspath(sablon_yol)), 'oto_harita.js'), encoding='utf-8').read().rstrip('\n')
 js = js.replace('/*@OTO_HARITA@*/', oto)
+# Panelin görünümü ayrı dosyada; Metin'in tasarım dosyası (2.6.0)
+panel = open(os.path.join(os.path.dirname(os.path.abspath(sablon_yol)), 'panel.css'), encoding='utf-8').read().rstrip('\n')
+if '`' in panel or '${' in panel:
+    sys.exit('RED: panel.css icinde ` veya ${ var, String.raw bozulur')
+js = js.replace('/*@PANEL_CSS@*/', panel)
 fontlar = json.load(open(sys.argv[4] if len(sys.argv) > 4 else 'fontlar_google.json', encoding='utf-8'))
 js = js.replace('/*@FONTLAR@*/[]', json.dumps(fontlar, ensure_ascii=False, separators=(',', ':')))
-for yer_tutucu in ('/*@DEGISKENLER@*/', '/*@KURALLAR@*/', '/*@FONTLAR@*/', '/*@OTO_HARITA@*/'):
+for yer_tutucu in ('/*@DEGISKENLER@*/', '/*@KURALLAR@*/', '/*@FONTLAR@*/', '/*@OTO_HARITA@*/', '/*@PANEL_CSS@*/'):
     if yer_tutucu in js:
         sys.exit('RED: doldurulmamis ' + yer_tutucu)
 open(cikti_yol, 'w', encoding='utf-8').write(js)
