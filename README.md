@@ -6,7 +6,7 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 
 | Betik | Sürüm | Ne yapar | Kurulum |
 |---|---|---|---|
-| Site Tema | 2.6.0 | Bütün sitelere göz teması ve canlı ayar paneli; claude.ai el yapımı haritayla, öteki siteler otomatik haritayla. Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
+| Site Tema | 2.7.0 | Bütün sitelere göz teması ve canlı ayar paneli; claude.ai el yapımı haritayla, öteki siteler otomatik haritayla. Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/site-tema.user.js) |
 | Proje Ağacı | 0.2.4 | claude.ai/code sohbet listesini başlıktaki proje emojisine göre klasörlere ayırır; klasör içinde en yeni üstte, emojisiz sohbetler Projesiz'de. Arşivli sohbetler, arama (#etiket), filtreler, açık sohbete yeşil nokta, klasör satırındaki ↵ ile o klasörde uzun adları alt satıra sarma. Yalnız bilgisayar | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/proje-agaci.user.js) |
 | Makro Menü | 8.2 | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir. Dişli düğme sürüklenir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | 3.4 | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
@@ -41,11 +41,13 @@ Panel tek ayar yeridir. Altta iki liste vardır: solda bölge (Sol menü, Sohbet
 |---|---|
 | Paneli aç / kapat | `Ctrl+Shift+Y`, ◐ düğmesine tık ya da Tampermonkey menüsü |
 | Bu sitede tema aç / kapat | ◐ düğmesine çift tık, ☰ ya da Tampermonkey menüsü; sayfa yenilenmez, son durum o sitede kalır. Kapalı sitede ◐ ve panel durur |
+| Yeni sitelerde tema | ☰ → **Yeni sitelerde tema: açık / kapalı**. Temayı hiç açıp kapatmadığın sitelerde başlangıç durumudur; açıp kapattığın site kendi durumunda kalır, ☰ → "… yeni site varsayılanını izlesin" onu varsayılana döndürür |
 | Nesne seç | Listeden tık; sayfada `Ctrl+sağ tık` (aynı yere tekrar: dıştaki nesne). Düz sağ tık tarayıcının menüsüdür |
 | Birden çok nesne | Listede `Ctrl+tık`; telefonda **Çoklu** düğmesi. Seçilenler etiket olarak görünür, × seçimden çıkarır |
 | Listede olmayan nesne | Sayfada `Ctrl+sağ tık` ya da Nesne başlığındaki **+**; ad verilir, kendi bölgesine eklenir |
 | Geri / ileri | `Ctrl+Z` / `Ctrl+Shift+Z`; **Geçmiş** son 50 adımı listeler, yenilemede kalır; **Geçmişi temizle** listeyi boşaltır |
 | Kaydet | Değişiklik önce taslaktır, kayıtlı tema değişmez. Başlığın altındaki satır: **Kaydet** üzerine yazar, **Farklı kaydet** yeni tema açar, **Vazgeç** taslağı siler. Listede ● taslağı olan temadır; ☰ → Fabrika ayarına dön hazır temayı ilk hâline getirir |
+| Yalnız bu site | Renk değişikliği ortak temadaysa satırda iki düğme çıkar: **Kaydet: bütün siteler** ortak temanın üzerine yazar, **Yalnız <site>** renkleri o siteye özel yeni temaya ("Göz 3 · chatgpt.com") kaydeder; öteki sitelerdeki tema değişmez |
 | Temalar | Sayfa: Göz 3 (varsayılan), Göz, Gece mavisi, Grafit, Kağıt (açık), Orijinal. Panel: Gece, Grafit, Lacivert, Orman, Kağıt (açık), Sis (açık); ☰ menüsünde panel teması da kopyalanır, adı değişir, listeden kaldırılır |
 | Temalar ve siteler | Temanın renkleri bütün sitelerde ortaktır; nesne ayarı (boyut, aralık…) yalnız o sitede kalır. ☰ → "Yalnız bu site için başka tema seç" |
 | Ayar taşıma | ☰ → Tümünü dosyaya kaydet (bütün siteler, temalar, panel, yüklenen yazı tipleri) / Dosyadan yükle (yedek, eski site ayarı, Claude Tema dosyası) |
@@ -64,13 +66,13 @@ Telefonda dikey tutulunca panel alttan, yan çevrilince sağdan açılır; uzun 
 
 ```
 cd site-tema-kaynak && python3 derle.py stylus_goz_tema.css sablon.user.js ../site-tema.user.js fontlar_google.json
-cd test && python3 -m http.server 8766 &
+cd test && python3 -m http.server 8766 --bind 127.0.0.1 &
 python3 dene.py ../../site-tema.user.js http://127.0.0.1:8766/ /tmp
 ```
 
 ### Panel tasarımı
 
-Panelin bütün görünümü `site-tema-kaynak/panel.css` dosyasındadır. `site-tema-kaynak/onizleme.html` derlenmiş betiği sahte bir sayfada panel açık hâlde çalıştırır ve `panel.css`'i her saniye yeniden okur: dosya kaydedilince panel derleme beklemeden yeni görünümle çizilir. Sayfa yerel sunucudan açılır (VS Code Live Preview ya da depo kökünde `python3 -m http.server`, sonra `http://127.0.0.1:8000/site-tema-kaynak/onizleme.html`). Önizlemenin kayıtları yalnız o sekmededir; **Sıfırla** baştan açar. `panel.css` içinde ters tırnak ve `${` kullanılmaz (derle.py reddeder).
+Panelin bütün görünümü `site-tema-kaynak/panel.css` dosyasındadır. `site-tema-kaynak/onizleme.html` derlenmiş betiği sahte bir sayfada panel açık hâlde çalıştırır ve `panel.css`'i her saniye yeniden okur: dosya kaydedilince panel derleme beklemeden yeni görünümle çizilir. Sayfa yerel sunucudan açılır (VS Code Live Preview ya da depo kökünde `python3 -m http.server --bind 127.0.0.1`, sonra `http://127.0.0.1:8000/site-tema-kaynak/onizleme.html`). Önizlemenin kayıtları yalnız o sekmededir; **Sıfırla** baştan açar. `panel.css` içinde ters tırnak ve `${` kullanılmaz (derle.py reddeder).
 
 `claude-tema-kaynak/` eski Claude Tema'nın kaynağıdır, değiştirilmez.
 

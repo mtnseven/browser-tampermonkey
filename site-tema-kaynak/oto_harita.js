@@ -134,16 +134,22 @@
       return liste;
     }
     function tur() {
-      zaman = 0; sonTur = Date.now();
+      zaman = 0;
+      // Arka plandaki sekmede ölçülmez; kuyruk sekme görününce işlenir (2.7.0)
+      if (document.hidden) return;
+      sonTur = Date.now();
       if (!o.etkin() || !document.body) { kuyruk.clear(); return; }
       const liste = topla();
       if (liste.length) isle(liste);
     }
-    // Sık değişen sayfada (akan yanıt) en çok yarım saniyede bir tur
+    // Sık değişen sayfada (akan yanıt) en çok yarım saniyede bir tur; son tur uzun sürdüyse
+    // aralık tur süresinin 15 katına kadar açılır, en çok 3 sn (2.7.0, hantallık)
     function planla() {
       if (zaman) return;
-      zaman = setTimeout(tur, Math.max(80, 500 - (Date.now() - sonTur)));
+      const ara = Math.min(3000, Math.max(500, sayac.sure * 15));
+      zaman = setTimeout(tur, Math.max(80, ara - (Date.now() - sonTur)));
     }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && kuyruk.size) planla(); });
     function baslat() {
       if (gozcu || !document.documentElement) return;
       gozcu = new MutationObserver(kayitlar => {

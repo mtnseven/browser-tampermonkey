@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Site Tema
 // @namespace    metin-site-tema
-// @version      2.6.0
+// @version      2.7.0
 // @description  Bütün sitelere göz teması ve canlı ayar paneli (claude.ai el yapımı harita, öteki siteler otomatik harita); claude.ai model seçicisi tek pencerede
 // @match        *://*/*
 // @run-at       document-start
@@ -23,7 +23,7 @@
 (function () {
   'use strict';
 
-  const SURUM = '2.6.0';
+  const SURUM = '2.7.0';
   const KISAYOL = 'Ctrl+Shift+Y';
   // Test sayfası site adını window.__ST_SITE ile verir; gerçek sitede tanımsızdır
   const SITE = String(window.__ST_SITE || location.hostname).replace(/^www\./, '');
@@ -717,16 +717,22 @@ div[class*="attachment"] {
       return liste;
     }
     function tur() {
-      zaman = 0; sonTur = Date.now();
+      zaman = 0;
+      // Arka plandaki sekmede ölçülmez; kuyruk sekme görününce işlenir (2.7.0)
+      if (document.hidden) return;
+      sonTur = Date.now();
       if (!o.etkin() || !document.body) { kuyruk.clear(); return; }
       const liste = topla();
       if (liste.length) isle(liste);
     }
-    // Sık değişen sayfada (akan yanıt) en çok yarım saniyede bir tur
+    // Sık değişen sayfada (akan yanıt) en çok yarım saniyede bir tur; son tur uzun sürdüyse
+    // aralık tur süresinin 15 katına kadar açılır, en çok 3 sn (2.7.0, hantallık)
     function planla() {
       if (zaman) return;
-      zaman = setTimeout(tur, Math.max(80, 500 - (Date.now() - sonTur)));
+      const ara = Math.min(3000, Math.max(500, sayac.sure * 15));
+      zaman = setTimeout(tur, Math.max(80, ara - (Date.now() - sonTur)));
     }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && kuyruk.size) planla(); });
     function baslat() {
       if (gozcu || !document.documentElement) return;
       gozcu = new MutationObserver(kayitlar => {
@@ -1002,7 +1008,9 @@ pre * { background-color: transparent !important; }
     fontVeri: oku('fontVeri', {}),
     modelPencere: oku('modelPencere', true),
     // Bu sitede tema kapalı: panel ve ◐ kalır, sayfa kendi görünümündedir; son durum sitede saklanır (2.6.0)
-    kapali: !!oku(SK('kapali'), false),
+    // Hiç açılıp kapatılmamış sitede başlangıç durumu "yeni sitelerde tema" ayarından gelir (2.7.0)
+    yeniSiteKapali: !!oku('yeniSiteKapali', false),
+    kapali: (k => k === null ? !!oku('yeniSiteKapali', false) : !!k)(oku(SK('kapali'), null)),
     favFontlar: oku('favFontlar', []),
     // Kullanıcının panel temaları ve kaldırılan hazır panel temaları (2.6.0)
     panelTemalar: oku('panelTemalar', {}),
@@ -1079,7 +1087,7 @@ pre * { background-color: transparent !important; }
     GM_addValueChangeListener(SK('kullanici'), uzaktan(v => { depo.kul = kulDuzelt(v); yenile(); }));
     GM_addValueChangeListener('paletler', uzaktan(v => { depo.pal = palDuzelt(v); yenile(); }));
     GM_addValueChangeListener('paletSecili', uzaktan(v => { if (!depo.siteTema) { depo.tema = v; yenile(); } }));
-    GM_addValueChangeListener(SK('kapali'), uzaktan(v => { depo.kapali = !!v; yenile(); dugmeBoya(); }));
+    GM_addValueChangeListener(SK('kapali'), uzaktan(v => { depo.kapali = v === null ? depo.yeniSiteKapali : !!v; yenile(); dugmeBoya(); }));
     GM_addValueChangeListener(SK('siteTema'), uzaktan(v => { depo.siteTema = v; depo.tema = v || oku('paletSecili', depo.tema); yenile(); }));
   }
 
@@ -2337,6 +2345,15 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (depo.tema !== 'Orijinal') oge('Temayı listeden kaldır', temaSil);
     if (depo.pal.silinen.length) oge('Kaldırılan hazır temaları geri getir', () => { depo.pal.silinen = []; palKaydet(); hepsiniCiz(); anlik('Hazır temalar geri geldi'); });
     oge(`${SITE} için tema: ${depo.kapali ? 'kapalı → aç' : 'açık → kapat'}`, () => { temaAcKapa(); menuCiz(); }, '', '◐ düğmesine çift tık da açar / kapatır; son durum bu sitede saklanır');
+    oge(`Yeni sitelerde tema: ${depo.yeniSiteKapali ? 'kapalı → açık yap' : 'açık → kapalı yap'}`, () => {
+      depo.yeniSiteKapali = !depo.yeniSiteKapali; yaz('yeniSiteKapali', depo.yeniSiteKapali); menuCiz();
+      bildir(`Daha önce açıp kapatmadığın sitelerde tema bundan sonra ${depo.yeniSiteKapali ? 'kapalı' : 'açık'} başlar`);
+    }, '', 'Temayı hiç açıp kapatmadığın sitelerdeki başlangıç durumu; açıp kapattığın siteler kendi durumunda kalır');
+    if (oku(SK('kapali'), null) !== null && depo.kapali !== depo.yeniSiteKapali) oge(`${SITE} yeni site varsayılanını izlesin (${depo.yeniSiteKapali ? 'kapalı' : 'açık'})`, () => {
+      depo.kapali = depo.yeniSiteKapali; yaz(SK('kapali'), null);
+      uygula(true); hepsiniCiz(); dugmeBoya(); menuCiz();
+      bildir(`${SITE}: tema ${depo.kapali ? 'kapalı' : 'açık'} (yeni site varsayılanı)`);
+    });
     if (harita) oge('Otomatik haritayı yeniden ölç (sayfanın kendi teması değiştiyse)', () => { harita.yenile(); setTimeout(menuCiz, 900); bildir('Harita yeniden ölçülüyor'); });
     bas('PANEL TEMASI · ' + depo.panelTema);
     for (const ad of panelTemaAdlari()) {
@@ -2603,9 +2620,13 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     const n = taslakSayisi(depo.tema);
     taslakEl.classList.toggle('acik', !!n);
     if (!n) { taslakEl.replaceChildren(); return; }
+    // Renk değişikliği ortak temadaysa iki yol: bütün siteler ya da yalnız bu site (2.7.0)
+    const pt = depo.pal.taslaklar[depo.tema] || {};
+    const renkVar = !depo.siteTema && (Object.keys(pt.degerler || {}).length || pt.temel);
     taslakEl.replaceChildren(
       Object.assign(el('span', 'not', `● ${n} kaydedilmedi`), { title: `${n} değişiklik yalnız taslakta; "${depo.tema}" kaydı değişmedi` }),
-      dug('Kaydet', `"${depo.tema}" temasının üzerine yaz`, taslakKaydet, 'kaydet'),
+      dug(renkVar ? 'Kaydet: bütün siteler' : 'Kaydet', `"${depo.tema}" temasının üzerine yaz${renkVar ? '; renkler bütün sitelerde değişir' : ''}`, taslakKaydet, 'kaydet'),
+      ...(renkVar ? [dug(`Yalnız ${SITE}`, `Renkleri yalnız ${SITE} için yeni temaya kaydet ("${depo.tema} · ${SITE}"); öteki sitelerde "${depo.tema}" değişmez`, taslakSiteKaydet, 'kaydet')] : []),
       dug('Farklı kaydet…', 'Yeni tema olarak kaydet; bu tema değişmez', taslakFarkliKaydet),
       dug('Vazgeç', 'Kaydedilmemiş değişiklikleri sil', taslakVazgec));
   }
@@ -2634,6 +2655,15 @@ input[type=range] { flex: 1; min-width: 50px; accent-color: var(--p-vurgu); back
     if (!ad || !ad.trim()) return;
     delete depo.kul.taslaklar[t.ad]; delete depo.pal.taslaklar[t.ad];
     yeniTema(t, benzersizAd(ad.trim()));
+  }
+  // Yalnız bu site: taslaklı tema bu siteye özel kopya olur; ortak tema ve öteki siteler değişmez (2.7.0)
+  function taslakSiteKaydet() {
+    const t = aktif();
+    const yeni = benzersizAd(`${t.ad} · ${SITE}`);
+    delete depo.kul.taslaklar[t.ad]; delete depo.pal.taslaklar[t.ad];
+    depo.siteTema = yeni; yaz(SK('siteTema'), yeni);
+    yeniTema(t, yeni);
+    bildir(`Yalnız ${SITE}: "${yeni}" kaydedildi; öteki sitelerde "${t.ad}" aynen kaldı`);
   }
   function taslakVazgec() {
     delete depo.kul.taslaklar[depo.tema]; delete depo.pal.taslaklar[depo.tema];
