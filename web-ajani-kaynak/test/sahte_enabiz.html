@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><title>Sahte e-Nabız</title>
+<style>
+:root { --ana-renk: #123456; --zemin: #fafafa; --yazi: #222; }
+body { font-family: Arial, sans-serif; background: var(--zemin); color: var(--yazi); }
+.kart { border: 1px solid #ccc; margin: 4px; padding: 6px; }
+.kart h5 { color: var(--ana-renk); margin: 0; }
+.modal { display: none; position: fixed; inset: 40px; background: #fff; border: 2px solid #333; }
+.modal.show { display: block; }
+.tab-pane { display: none; } .tab-pane.active { display: block; }
+.dugme-ana { background: var(--ana-renk); color: #fff; border-radius: 6px; padding: 4px 10px; }
+</style></head>
+<body>
+<nav id="menu"><a href="/Home/Ziyaretler">Ziyaretlerim</a> <a href="/Home/Tahliller">Tahlillerim</a> <a href="/Home/Receteler">Reçetelerim</a> <a href="#" id="spa">Tek sayfa geçiş</a></nav>
+<form id="giris"><input name="kullanici" placeholder="Kullanıcı"><input type="password" name="sifre" id="sifre"><button type="button" id="girisBtn">Giriş</button></form>
+<div class="filtre"><label for="yil">Yıl</label><select id="yil" name="yil"><option>2025</option><option>2024</option><option>2023</option><option>2022</option><option>2021</option><option>2020</option></select>
+<input type="search" name="ara" placeholder="Hastane ara"></div>
+<ul class="nav nav-tabs" role="tablist"><li><button role="tab" aria-selected="true" class="nav-link active" data-hedef="t1">Muayene</button></li><li><button role="tab" aria-selected="false" class="nav-link" data-hedef="t2">Acil</button></li></ul>
+<div id="t1" class="tab-pane active" role="tabpanel"><p>Muayene listesi</p></div><div id="t2" class="tab-pane" role="tabpanel"><p>Acil listesi</p></div>
+<div id="kartlar"></div>
+<ul class="pagination"></ul>
+<table id="tablo"><thead><tr><th>Tarih</th><th>Hastane</th><th>Klinik</th><th>Hekim</th></tr></thead><tbody><tr><td>01.01.2025</td><td>A</td><td>B</td><td>C</td></tr><tr><td>02.01.2025</td><td>A</td><td>B</td><td>C</td></tr></tbody></table>
+<div class="islemler"><button class="dugme-ana" id="silBtn">Sil</button> <button>Evaluate</button> <button>Hide in Share</button> <button id="raporBtn">Raporu aç</button> <button id="hataBtn">Hata üret</button> <button id="bozukBtn">Bozuk istek</button></div>
+<div class="modal" id="detay" role="dialog"><h4 class="modal-title">Ziyaret Detayı</h4>
+<ul class="nav nav-tabs"><li><a href="#" class="nav-link active">Tanı</a></li><li><a href="#" class="nav-link">İlaç</a></li><li><a href="#" class="nav-link">Tahlil</a></li></ul>
+<div class="icerik"></div><button id="kapatBtn">Kapat</button></div>
+<script>
+window.silindi = 0;
+const kartlar = document.getElementById('kartlar');
+for (let i = 1; i <= 6; i++) kartlar.insertAdjacentHTML('beforeend', `<div class="kart"><h5>Ziyaret ${i}</h5><span class="tarih">0${i}.03.2025</span><span class="hastane">Devlet Hastanesi ${i}</span><button class="detay" data-no="${i}">Detay</button></div>`);
+const pg = document.querySelector('.pagination');
+for (let i = 1; i <= 5; i++) pg.insertAdjacentHTML('beforeend', `<li><a href="#" class="sayfa">${i}</a></li>`);
+pg.insertAdjacentHTML('beforeend', '<li><span>…</span></li><li><a href="#" class="sayfa">45</a></li>');
+document.querySelectorAll('[role=tab]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[role=tab]').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+  document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); b.setAttribute('aria-selected', 'true');
+  document.getElementById(b.dataset.hedef).classList.add('active');
+});
+document.querySelectorAll('.detay').forEach(b => b.onclick = () => {
+  fetch('/api/ziyaret?yil=' + document.getElementById('yil').value + '&no=' + b.dataset.no + '&takip=ABCDEF1234567890XYZ').then(r => r.json()).then(j => {
+    const m = document.getElementById('detay');
+    m.querySelector('.icerik').innerHTML = `<table><tr><th>Tanı</th><th>Değer</th></tr><tr><td>${j.tani}</td><td>${j.deger}</td></tr></table>`;
+    m.classList.add('show');
+  });
+});
+document.getElementById('kapatBtn').onclick = () => document.getElementById('detay').classList.remove('show');
+document.getElementById('silBtn').onclick = () => { window.silindi++; };
+document.getElementById('raporBtn').onclick = () => window.open('/rapor.pdf', '_blank');
+document.getElementById('hataBtn').onclick = () => setTimeout(() => { throw new Error('sahte betik hatası'); });
+document.getElementById('bozukBtn').onclick = () => { const x = new XMLHttpRequest(); x.open('GET', '/api/bozuk'); x.send(); };
+document.getElementById('girisBtn').onclick = () => { const x = new XMLHttpRequest(); x.open('POST', '/api/giris'); x.setRequestHeader('content-type', 'application/x-www-form-urlencoded'); x.send('kullanici=deneme&sifre=' + encodeURIComponent(document.getElementById('sifre').value)); };
+document.getElementById('spa').onclick = e => { e.preventDefault(); history.pushState({}, '', '/Home/Tek'); };
+</script>
+</body></html>
