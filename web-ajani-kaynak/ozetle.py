@@ -2,7 +2,8 @@
 # Web Ajanı kayıt dosyasını kısa Markdown özetine çevirir.
 # Özet yapıyı gösterir, değeri göstermez: yanıtlarda yalnız alan adı ve tür,
 # açılan pencerede yalnız başlık ve uzunluk. Claude yalnız bu özeti okur.
-# Kullanım: ozetle.py web-ajani-SITE-TARIH.json [--sayfa YOL] > ozet.md
+# Kullanım: ozetle.py web-ajani-SITE-TARIH.json [--sayfa YOL] [--fotokopi] > ozet.md
+#   --fotokopi  sayfa fotokopilerini de basar (değer içerir; yalnız gerektiğinde)
 import json, re, sys
 from collections import Counter, OrderedDict
 from urllib.parse import urlsplit, parse_qsl
@@ -144,24 +145,32 @@ for sayfa, liste in sayfalar.items():
 # ------------------------------------------------ tıklama akışı
 yaz('')
 yaz('## Tıklama akışı')
+# Tık numarası her sayfa yüklemesinde 1'den başlar; anahtar (yükleme, tık no)
+tk = lambda o: (o.get('yk'), o.get('tikNo'))
 istek_tik = {}
 for o in olaylar:
     if o['tur'] == 'istek' and o.get('tikNo'):
-        istek_tik.setdefault(o['tikNo'], []).append(o)
-durum_tik = {o['tikNo']: o for o in olaylar if o['tur'] == 'durum'}
+        istek_tik.setdefault(tk(o), []).append(o)
+durum_tik = {tk(o): o for o in olaylar if o['tur'] == 'durum'}
 pencere_tik = {}
 for o in olaylar:
     if o['tur'] == 'pencere':
-        pencere_tik.setdefault(o.get('tikNo'), []).append(o)
+        pencere_tik.setdefault(tk(o), []).append(o)
 tiklanan = set()
+sira = 0
+onceki_sayfa = None
 for o in olaylar:
     if o['tur'] != 'tik':
         continue
     g = o['oge']
     tiklanan.add(g['secici'] + '|' + g.get('metin', ''))
+    sira += 1
     yaz('')
-    yaz('%d. %s "%s" · %s%s' % (o['tikNo'], g.get('etiket'), g.get('metin', ''), g['secici'], ' · FRENLİ' if g.get('frenli') else ''))
-    d = durum_tik.get(o['tikNo'])
+    yaz('%d. %s%s "%s" · %s%s' % (sira, '[keşif] ' if o.get('kesif') else '', g.get('etiket'), g.get('metin', ''), g['secici'], ' · FRENLİ' if g.get('frenli') else ''))
+    if sira == 1 or o.get('sayfa') != onceki_sayfa:
+        yaz('   (sayfa %s)' % o.get('sayfa'))
+    onceki_sayfa = o.get('sayfa')
+    d = durum_tik.get(tk(o))
     if d:
         if d.get('adresDegisti'):
             yaz('   → adres: %s' % d['adresDegisti'])
@@ -181,15 +190,15 @@ for o in olaylar:
             yaz('   → değişim yok')
         elif not d.get('acilanlar') and not d.get('adresDegisti'):
             yaz('   → %d öğe eklendi, %d öğe değişti' % (d.get('eklenenOge', 0), d.get('degisenOge', 0)))
-    for i in istek_tik.get(o['tikNo'], []):
+    for i in istek_tik.get(tk(o), []):
         yaz('   → istek: %s %s → %s' % (i['yontem'], adres_kalibi(i['adres'])[0], i.get('durum')))
-    for p in pencere_tik.get(o['tikNo'], []):
+    for p in pencere_tik.get(tk(o), []):
         yaz('   → yeni pencere: %s' % p.get('adres'))
 for o in olaylar:
     if o['tur'] == 'degisim':
         g = o['oge']
         ne = o.get('secilen') if 'secilen' in o else ('işaretli' if o.get('isaretli') else 'gizli alan' if o.get('gizli') else '%s karakter' % o.get('uzunluk'))
-        yaz('- Seçim değişti (tık %s): %s → %s' % (o.get('tikNo'), g.get('secici'), ne))
+        yaz('- Seçim değişti%s (tık %s): %s → %s' % (' [keşif]' if o.get('kesif') else '', o.get('tikNo'), g.get('secici'), ne))
 
 # ------------------------------------------------ ağ
 yaz('')
@@ -230,6 +239,46 @@ for ad, liste in gruplar.items():
             ornekler.append(y)
     for y in ornekler[:3]:
         yaz('    yanıt: ' + y)
+
+# ------------------------------------------------ keşif
+kes = [o for o in olaylar if o['tur'] == 'kesif']
+if kes:
+    yaz('')
+    yaz('## Otomatik keşif')
+    for o in kes:
+        if o.get('basladi'):
+            yaz('- Başladı: %s · %s' % (o.get('sayfa'), o.get('zaman', '')[:19]))
+        elif o.get('bitti'):
+            yaz('- Bitti: %s · %s adım · %s frenli/güvensiz atlandı' % (o.get('neden'), o.get('adim'), o.get('atlanan')))
+        elif o.get('uyari'):
+            yaz('- Uyarı: %s · %s' % (o['uyari'], o.get('mesaj', '')))
+
+# ------------------------------------------------ toplama
+top = [o for o in olaylar if o['tur'] == 'toplama']
+if top:
+    yaz('')
+    yaz('## Toplama')
+    for o in top:
+        if o.get('basladi'):
+            yaz('- Başladı: %s · değişkenler "%s" · %s kombinasyon, sıra %s%s' % (o.get('istek'), o.get('degiskenler'), o.get('toplam'), o.get('sira'), ' (sürdür)' if o.get('surdur') else ''))
+        elif o.get('bitti'):
+            yaz('- Bitti: %s · %s / %s' % (o.get('neden'), o.get('sira'), o.get('toplam')))
+    veri = [o for o in top if o.get('degerler') is not None]
+    if veri:
+        durumlar = Counter(str(o.get('durum')) for o in veri)
+        yaz('- Yanıt: %d · durum %s · toplam %d KB' % (len(veri), dict(durumlar), sum(o.get('boyut', 0) for o in veri) // 1024))
+        anahtarlar = OrderedDict()
+        for o in veri:
+            for k, v in o['degerler'].items():
+                anahtarlar.setdefault(k, []).append(v)
+        for k, l in anahtarlar.items():
+            yaz('  - %s: %s … %s (%d değer)' % (k, l[0], l[-1], len(set(l))))
+        ornek = next((o for o in veri if o.get('durum') == 200 and o.get('yanit')), None)
+        if ornek:
+            yaz('  - yanıt yapısı: ' + yanit_ozet(ornek))
+        for o in veri:
+            if o.get('hata'):
+                yaz('  - hata %s: %s' % (json.dumps(o['degerler'], ensure_ascii=False), o['hata']))
 
 # ------------------------------------------------ kapsama
 yaz('')
@@ -296,5 +345,17 @@ if tas:
     yaz('- Boyutlar: ' + ', '.join('%s ×%d' % (x['deger'], x['sayi']) for x in t.get('boyutlar', [])[:10]))
     if t.get('degiskenler'):
         yaz('- Değişkenler (ilk 60): ' + ', '.join('%s=%s' % kv for kv in list(t['degiskenler'].items())[:60]))
+
+# ------------------------------------------------ fotokopi (yalnız --fotokopi ile; değer içerir)
+fk = [o for o in olaylar if o['tur'] == 'fotokopi']
+if fk:
+    yaz('')
+    yaz('## Sayfa fotokopisi')
+    for o in fk:
+        yaz('- %s · %s · %d karakter' % (o.get('sayfa'), o.get('baslik', ''), len(o.get('metin', ''))))
+        if '--fotokopi' in args:
+            yaz('')
+            yaz(o.get('metin', ''))
+            yaz('')
 
 print('\n'.join(out))

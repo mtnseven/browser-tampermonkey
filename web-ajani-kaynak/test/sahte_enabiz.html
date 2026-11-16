@@ -20,12 +20,25 @@ body { font-family: Arial, sans-serif; background: var(--zemin); color: var(--ya
 <div id="kartlar"></div>
 <ul class="pagination"></ul>
 <table id="tablo"><thead><tr><th>Tarih</th><th>Hastane</th><th>Klinik</th><th>Hekim</th></tr></thead><tbody><tr><td>01.01.2025</td><td>A</td><td>B</td><td>C</td></tr><tr><td>02.01.2025</td><td>A</td><td>B</td><td>C</td></tr></tbody></table>
+<input type="hidden" name="__RequestVerificationToken" value="TOKEN-ABC">
+<button type="button" aria-expanded="false" id="akordeon">Ek bilgiler</button><div id="ek" hidden><p>Ek bilgi içeriği</p></div>
+<details id="ayrinti"><summary>Ayrıntılar</summary><p>Gizli ayrıntı metni</p></details>
+<form id="aramaForm"><input name="q"><button>Ara</button></form>
+<button id="tahlilBtn">Tahlilleri getir</button> <button id="arsivBtn">Arşivle</button>
+<div id="tahlilSonuc"></div>
 <div class="islemler"><button class="dugme-ana" id="silBtn">Sil</button> <button>Evaluate</button> <button>Hide in Share</button> <button id="raporBtn">Raporu aç</button> <button id="hataBtn">Hata üret</button> <button id="bozukBtn">Bozuk istek</button></div>
 <div class="modal" id="detay" role="dialog"><h4 class="modal-title">Ziyaret Detayı</h4>
 <ul class="nav nav-tabs"><li><a href="#" class="nav-link active">Tanı</a></li><li><a href="#" class="nav-link">İlaç</a></li><li><a href="#" class="nav-link">Tahlil</a></li></ul>
 <div class="icerik"></div><button id="kapatBtn">Kapat</button></div>
 <script>
-window.silindi = 0;
+window.silindi = 0; window.arsiv = 0; window.gonderildi = 0;
+document.getElementById('aramaForm').onsubmit = e => { e.preventDefault(); window.gonderildi++; };
+document.getElementById('arsivBtn').onclick = () => { if (confirm('Arşivlensin mi?')) window.arsiv++; };
+document.getElementById('akordeon').onclick = function () { const a = this.getAttribute('aria-expanded') === 'true'; this.setAttribute('aria-expanded', String(!a)); document.getElementById('ek').hidden = a; };
+function kartCiz(sayfa, yil) { kartlar.innerHTML = ''; for (let i = 1; i <= 6; i++) kartlar.insertAdjacentHTML('beforeend', `<div class="kart"><h5>Ziyaret ${(sayfa - 1) * 6 + i} (${yil})</h5><span class="tarih">0${i}.03.${yil}</span><span class="hastane">Devlet Hastanesi ${i}</span><button class="detay" data-no="${i}">Detay</button></div>`); baglaDetay(); }
+function liste(sayfa) { const yil = document.getElementById('yil').value; fetch('/api/liste?yil=' + yil + '&sayfa=' + sayfa).then(r => r.json()).then(j => kartCiz(j.sayfa, j.yil)); }
+document.getElementById('tahlilBtn').onclick = () => { const x = new XMLHttpRequest(); x.open('POST', '/api/tahlil'); x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8'); x.setRequestHeader('X-Requested-With', 'XMLHttpRequest'); x.setRequestHeader('RequestVerificationToken', document.querySelector('[name=__RequestVerificationToken]').value);
+  x.onload = () => { document.getElementById('tahlilSonuc').textContent = x.responseText.slice(0, 80); }; x.send('yil=' + document.getElementById('yil').value + '&__RequestVerificationToken=' + document.querySelector('[name=__RequestVerificationToken]').value); };
 const kartlar = document.getElementById('kartlar');
 for (let i = 1; i <= 6; i++) kartlar.insertAdjacentHTML('beforeend', `<div class="kart"><h5>Ziyaret ${i}</h5><span class="tarih">0${i}.03.2025</span><span class="hastane">Devlet Hastanesi ${i}</span><button class="detay" data-no="${i}">Detay</button></div>`);
 const pg = document.querySelector('.pagination');
@@ -37,13 +50,16 @@ document.querySelectorAll('[role=tab]').forEach(b => b.onclick = () => {
   b.classList.add('active'); b.setAttribute('aria-selected', 'true');
   document.getElementById(b.dataset.hedef).classList.add('active');
 });
-document.querySelectorAll('.detay').forEach(b => b.onclick = () => {
+document.getElementById('yil').onchange = () => liste(1);
+pg.addEventListener('click', e => { const a = e.target.closest('a.sayfa'); if (!a) return; e.preventDefault(); liste(+a.textContent); });
+function baglaDetay() { document.querySelectorAll('.detay').forEach(b => b.onclick = () => {
   fetch('/api/ziyaret?yil=' + document.getElementById('yil').value + '&no=' + b.dataset.no + '&takip=ABCDEF1234567890XYZ').then(r => r.json()).then(j => {
     const m = document.getElementById('detay');
     m.querySelector('.icerik').innerHTML = `<table><tr><th>Tanı</th><th>Değer</th></tr><tr><td>${j.tani}</td><td>${j.deger}</td></tr></table>`;
     m.classList.add('show');
   });
-});
+}); }
+baglaDetay();
 document.getElementById('kapatBtn').onclick = () => document.getElementById('detay').classList.remove('show');
 document.getElementById('silBtn').onclick = () => { window.silindi++; };
 document.getElementById('raporBtn').onclick = () => window.open('/rapor.pdf', '_blank');

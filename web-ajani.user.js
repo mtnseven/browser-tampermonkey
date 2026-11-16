@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Web Ajanı
 // @namespace    mtnseven/browser-tampermonkey
-// @version      0.1.0
-// @description  Siteyi senin gördüğün gibi kaydeder: sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri, işaretlenen öğenin seçicisi ve stili, sayfa tasarımı, hatalar. Kayıt cihazda kalır, dosya olarak indirilir. Yalnız izin verilen sitede çalışır (Alt+Shift+W).
+// @version      0.2.0
+// @description  Siteyi senin gördüğün gibi kaydeder: sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri, işaretlenen öğenin seçicisi ve stili, sayfa tasarımı, hatalar; otomatik keşif, toplayıcı, sayfa fotokopisi. Kayıt cihazda kalır, dosya olarak indirilir. Yalnız izin verilen sitede çalışır (Alt+Shift+W).
 // @author       mtnseven
 // @match        *://*/*
 // @run-at       document-start
@@ -13,9 +13,11 @@
 
 (function () {
   'use strict';
-  const SURUM = '0.1.0';
+  const SURUM = '0.2.0';
   const T0 = performance.now();
   const CERCEVE = window.top !== window;
+  // Sayfa yüklemesi kimliği: tık numarası her yüklemede 1'den başlar; özet ikisini birlikte kullanır
+  const YUKLEME = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
   // ------------------------------------------------ izin: yalnız listedeki veya elle açılan sitede çalışır
   // Listede olmayan sitede yalnız Alt+Shift+W dinlenir; başka hiçbir şey kurulmaz.
@@ -42,12 +44,15 @@
     ['ag', 'Ağ kaydı', 'İstek ve yanıtlar değerleriyle, tetikleyen tıklamaya bağlı'],
     ['hata', 'Hata günlüğü', 'Sayfadaki hatalar ve başarısız istekler'],
     ['isaretci', 'Öğe işaretçi', 'Tıklanan öğenin seçicisi, çevresi ve stili'],
-    ['tasarim', 'Tasarım okuyucu', 'Renkler, yazı tipleri, CSS değişkenleri']
+    ['tasarim', 'Tasarım okuyucu', 'Renkler, yazı tipleri, CSS değişkenleri'],
+    ['kesif', 'Otomatik keşif', 'Sekmeler, filtre seçenekleri, ikinci sayfa, kapalı bölümler, ilk kartın penceresi; frenli düğmeye basmaz'],
+    ['toplayici', 'Toplayıcı', 'Kaydedilen bir veri adresini bütün yıl ve sayfalar için çağırır; oturum düşünce durur'],
+    ['fotokopi', 'Sayfa fotokopisi', 'Sayfanın sade metin hâli (başlık, liste, tablo, bağlantı)']
   ];
   // Site profili: siteye özel varsayılan. Ağ kaydı yanıt gövdesini sakladığı için yalnız profilde açıktır.
-  const PROFILLER = { 'enabiz.gov.tr': { moduller: { ag: true } } };
+  const PROFILLER = { 'enabiz.gov.tr': { moduller: { ag: true, toplayici: true } } };
   const profil = Object.entries(PROFILLER).find(([s]) => host === s || host.endsWith('.' + s));
-  let ayar = { moduller: { harita: true, durum: true, ag: false, hata: true, isaretci: true, tasarim: true } };
+  let ayar = { moduller: { harita: true, durum: true, ag: false, hata: true, isaretci: true, tasarim: true, kesif: true, toplayici: false, fotokopi: true } };
   if (profil) Object.assign(ayar.moduller, profil[1].moduller);
   try { const a = JSON.parse(localStorage.getItem(AYAR)); if (a && a.moduller) Object.assign(ayar.moduller, a.moduller); } catch (e) {}
   const acikMi = m => !!ayar.moduller[m];
@@ -70,8 +75,9 @@
   let yazZamani = null;
   const sayac = { toplam: 0 };
   function olay(tur, veri) {
-    const o = Object.assign({}, veri, { tur, zaman: new Date().toISOString(), sayfa: location.pathname + location.search });
+    const o = Object.assign({}, veri, { tur, zaman: new Date().toISOString(), sayfa: location.pathname + location.search, yk: YUKLEME });
     if (CERCEVE) o.cerceve = true;
+    for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
     kuyruk.push(o);
     sayac.toplam++; sayac[tur] = (sayac[tur] || 0) + 1;
     if (!yazZamani) yazZamani = setTimeout(bosalt, 800);
@@ -256,7 +262,7 @@
     if (!el) return;
     tikNo++;
     sonTik = { no: tikNo, zaman: Date.now(), oge: oge(el) };
-    olay('tik', { tikNo, oge: sonTik.oge });
+    olay('tik', { tikNo, oge: sonTik.oge, kesif: kesifte || undefined });
     if (acikMi('durum')) durumIzle();
   }
   function durumIzle() {
@@ -362,41 +368,60 @@
       return x.origin === location.origin ? x.pathname + x.search : x.href;
     } catch (e) { return String(u); }
   }
+  // İstek başlıkları: toplayıcının isteği aynen yeniden kurabilmesi için. Gizli başlığın değeri tutulmaz.
+  const GIZLI_BASLIK = /authorization|cookie|token|secret|key|verification|csrf|xsrf/i;
+  function basliklarTemizle(b) {
+    const o = {};
+    try {
+      const l = b instanceof Headers ? [...b.entries()] : Array.isArray(b) ? b : Object.entries(b || {});
+      for (const [k, v] of l) o[k.toLowerCase()] = GIZLI_BASLIK.test(k) ? '<gizli>' : String(v).slice(0, 200);
+    } catch (e) {}
+    return Object.keys(o).length ? o : undefined;
+  }
   function istekKaydet(o) {
     if (/\.(js|mjs|css|png|jpe?g|gif|webp|svg|woff2?|ttf|ico|map)(\?|$)/i.test(o.adres)) return;
     const tik = sonTik && Date.now() - sonTik.zaman < 4000 ? sonTik.no : null;
-    const kayit = { yontem: (o.yontem || 'GET').toUpperCase(), adres: adresTemizle(o.adres), durum: o.durum, icerikTuru: o.tur || '', sure: o.sure, tikNo: tik, istek: govdeTemizle(o.govde) };
+    const kayit = { yontem: (o.yontem || 'GET').toUpperCase(), adres: adresTemizle(o.adres), durum: o.durum, icerikTuru: o.tur || '', sure: o.sure, tikNo: tik, istek: govdeTemizle(o.govde), basliklar: basliklarTemizle(o.basliklar) };
     if (o.metin != null) { kayit.yanit = o.metin.slice(0, YANIT_SINIRI); if (o.metin.length > YANIT_SINIRI) kayit.kesildi = o.metin.length; }
     if (o.hata) kayit.hata = o.hata;
+    if (o.yonlendi) kayit.yonlendi = o.yonlendi;
     if (acikMi('ag')) olay('istek', kayit);
     if (acikMi('hata') && (o.hata || o.durum >= 400)) olay('hata', { kaynak: 'istek', mesaj: kayit.yontem + ' ' + kayit.adres + ' → ' + (o.hata || o.durum), tikNo: tik });
   }
+  // Süren istek sayısı: keşif ve toplayıcı sayfanın sakinleşmesini bununla bekler.
+  let bekleyen = 0;
+  const ASIL_FETCH = window.fetch;
   if (acikMi('ag') || acikMi('hata')) {
-    const asilFetch = window.fetch;
-    if (asilFetch) window.fetch = function (girdi, secenek) {
+    if (ASIL_FETCH) window.fetch = function (girdi, secenek) {
       const adres = typeof girdi === 'string' ? girdi : (girdi && girdi.url) || String(girdi);
       const yontem = (secenek && secenek.method) || (girdi && girdi.method) || 'GET';
       const govde = secenek && secenek.body;
+      const basliklar = (secenek && secenek.headers) || (girdi && girdi.headers);
       const t = performance.now();
-      return asilFetch.apply(this, arguments).then(r => {
+      bekleyen++;
+      return ASIL_FETCH.apply(this, arguments).then(r => {
+        bekleyen--;
         const tur = r.headers.get('content-type') || '';
-        const k = { yontem, adres, govde, durum: r.status, tur, sure: Math.round(performance.now() - t) };
+        const k = { yontem, adres, govde, basliklar, durum: r.status, tur, sure: Math.round(performance.now() - t), yonlendi: r.redirected ? r.url : undefined };
         if (!acikMi('ag') || IKILI.test(tur) || tur.includes('event-stream')) istekKaydet(k);
         else r.clone().text().then(m => { k.metin = m; istekKaydet(k); }).catch(() => istekKaydet(k));
         return r;
-      }, err => { istekKaydet({ yontem, adres, govde, durum: 0, hata: String(err && err.message || err), sure: Math.round(performance.now() - t) }); throw err; });
+      }, err => { bekleyen--; istekKaydet({ yontem, adres, govde, basliklar, durum: 0, hata: String(err && err.message || err), sure: Math.round(performance.now() - t) }); throw err; });
     };
-    const xOpen = XMLHttpRequest.prototype.open, xSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (m, u) { this.__wa = { yontem: m, adres: u }; return xOpen.apply(this, arguments); };
+    const xOpen = XMLHttpRequest.prototype.open, xSend = XMLHttpRequest.prototype.send, xBaslik = XMLHttpRequest.prototype.setRequestHeader;
+    XMLHttpRequest.prototype.open = function (m, u) { this.__wa = { yontem: m, adres: u, basliklar: [] }; return xOpen.apply(this, arguments); };
+    XMLHttpRequest.prototype.setRequestHeader = function (k, v) { if (this.__wa) this.__wa.basliklar.push([k, v]); return xBaslik.apply(this, arguments); };
     XMLHttpRequest.prototype.send = function (govde) {
       const x = this, k = x.__wa;
       if (k) {
         const t = performance.now();
+        bekleyen++;
         x.addEventListener('loadend', () => {
+          bekleyen--;
           const tur = x.getResponseHeader('content-type') || '';
           let metin = null;
           try { if (!acikMi('ag')) metin = null; else if (!IKILI.test(tur) && (x.responseType === '' || x.responseType === 'text')) metin = x.responseText; else if (x.responseType === 'json') metin = JSON.stringify(x.response); } catch (e) {}
-          istekKaydet({ yontem: k.yontem, adres: k.adres, govde, durum: x.status, tur, metin, sure: Math.round(performance.now() - t), hata: x.status === 0 ? 'ağ hatası' : undefined });
+          istekKaydet({ yontem: k.yontem, adres: k.adres, govde, basliklar: k.basliklar, durum: x.status, tur, metin, sure: Math.round(performance.now() - t), hata: x.status === 0 ? 'ağ hatası' : undefined, yonlendi: x.responseURL && x.responseURL !== new URL(k.adres, location.href).href ? x.responseURL : undefined });
         });
       }
       return xSend.apply(this, arguments);
@@ -531,6 +556,311 @@
   }, true);
   addEventListener('keydown', e => { if (isaretlemede && e.key === 'Escape') isaretciKapat(); }, true);
 
+  // ------------------------------------------------ SAKİNLİK: istek bitti, sayfa bir süre değişmedi
+  function sakinBekle(enCok, sessiz) {
+    enCok = enCok || 5000; sessiz = sessiz || 600;
+    return new Promise(coz => {
+      const t0 = Date.now(); let son = Date.now();
+      const g = new MutationObserver(() => { son = Date.now(); });
+      g.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+      const bak = () => {
+        const simdi = Date.now();
+        if ((bekleyen <= 0 && simdi - son >= sessiz && simdi - t0 >= 300) || simdi - t0 >= enCok) { g.disconnect(); coz(); }
+        else setTimeout(bak, 100);
+      };
+      setTimeout(bak, 150);
+    });
+  }
+  const bekle = ms => new Promise(c => setTimeout(c, ms));
+
+  // ------------------------------------------------ OTOMATİK KEŞİF
+  // Metin'in elle gezdiğini tamamlar. Frenli düğmeye, başka sayfaya giden bağlantıya, yeni sekme açan
+  // bağlantıya ve form gönderen düğmeye basmaz. Keşif sürerken confirm/alert/prompt engellenir (hayır).
+  let kesifte = false, kesifDur = false;
+  const KESIF_SINIR = 80;
+  const SEKME = '[role=tab], .nav-tabs a, .nav-tabs button, .nav-pills a, .nav-pills button, .tab-link, [data-toggle=tab], [data-bs-toggle=tab]';
+  function acikPencere() {
+    const l = [...document.querySelectorAll(PENCERE)].filter(p => !bizim(p) && gorunur(p) && !p.matches('[role=tabpanel], [role=listbox], [role=menu]'));
+    return l.length ? l[l.length - 1] : null;
+  }
+  function guvenliMi(el) {
+    if (!el || !el.isConnected || bizim(el) || frenli(el) || !gorunur(el)) return false;
+    if (el.closest('[disabled], [aria-disabled=true]')) return false;
+    const a = el.closest('a[href]');
+    if (a) {
+      const h = (a.getAttribute('href') || '').trim();
+      if (a.target === '_blank' || a.hasAttribute('download')) return false;
+      if (h && !/^(#|javascript:)/i.test(h)) {
+        try { const u = new URL(h, location.href); if (u.origin !== location.origin || u.pathname + u.search !== location.pathname + location.search) return false; } catch (e) { return false; }
+      }
+    }
+    const f = el.closest('form');
+    if (f && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')))) return false;
+    return true;
+  }
+  function pencereKapat(p) {
+    const kapat = [...p.querySelectorAll('[data-dismiss], [data-bs-dismiss], .close, .btn-close, [aria-label], button')]
+      .find(b => gorunur(b) && (b.matches('[data-dismiss], [data-bs-dismiss], .close, .btn-close') || /^(kapat|close|×|x|tamam|ok|vazgeç|iptal|cancel)$/i.test((b.getAttribute('aria-label') || b.textContent || '').trim())));
+    if (kapat && !frenli(kapat)) { kapat.click(); return true; }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+    return false;
+  }
+  async function kesfet() {
+    if (kesifte || !acikMi('kesif')) return;
+    kesifte = true; kesifDur = false;
+    const adresYok = () => location.href.split('#')[0];
+    const adres0 = adresYok(), denenen = new Set();
+    let adim = 0, atlanan = 0;
+    const asil = { confirm: window.confirm, alert: window.alert, prompt: window.prompt, open: window.open };
+    window.open = u => { olay('kesif', { uyari: 'yeni pencere engellendi', mesaj: kirp(String(u || ''), 200) }); return null; };
+    window.confirm = m => { olay('kesif', { uyari: 'confirm engellendi (hayır)', mesaj: kirp(String(m), 200) }); return false; };
+    window.alert = m => { olay('kesif', { uyari: 'alert', mesaj: kirp(String(m), 200) }); };
+    window.prompt = m => { olay('kesif', { uyari: 'prompt engellendi', mesaj: kirp(String(m), 200) }); return null; };
+    const devam = () => !kesifDur && adim < KESIF_SINIR && adresYok() === adres0;
+    const tikla = async (el, neden) => {
+      if (!devam()) return false;
+      const anahtar = secici(el) + '|' + kirp(el.textContent, 40);
+      if (denenen.has(anahtar)) return false;
+      // Görünmeyen öğe sonra görünebilir (kapalı penceredeki sekme); denenmiş sayılmaz
+      if (!guvenliMi(el)) { if (el.isConnected && gorunur(el)) { denenen.add(anahtar); atlanan++; } return false; }
+      denenen.add(anahtar);
+      adim++;
+      kesifBildir(adim + '. ' + neden + ': ' + kirp(el.textContent || el.getAttribute('aria-label') || '', 30));
+      try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+      el.click();
+      await sakinBekle();
+      return true;
+    };
+    const sekmeler = async (kok, yer) => {
+      for (const el of [...kok.querySelectorAll(SEKME)].filter(e => !bizim(e))) {
+        if (!devam()) return;
+        const secili = el.getAttribute('aria-selected') === 'true' || el.classList.contains('active');
+        if (!secili) await tikla(el, yer + ' sekme');
+      }
+    };
+    const listeler = async kok => {
+      for (const sel of [...kok.querySelectorAll('select')].filter(e => !bizim(e) && gorunur(e) && !gizliAlan(e))) {
+        const ilk = sel.selectedIndex;
+        for (let i = 0; i < Math.min(sel.options.length, 40) && devam(); i++) {
+          if (i === ilk || sel.options[i].disabled) continue;
+          adim++;
+          kesifBildir(adim + '. seçenek: ' + kirp(sel.options[i].textContent, 30));
+          sel.selectedIndex = i;
+          sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true }));
+          olay('degisim', { tikNo, kesif: true, oge: { etiket: 'select', secici: secici(sel), ad: sel.name || '' }, secilen: kirp(sel.options[i].textContent, 60) });
+          if (acikMi('durum')) durumIzle();
+          await sakinBekle();
+        }
+        if (sel.selectedIndex !== ilk && sel.isConnected) { sel.selectedIndex = ilk; sel.dispatchEvent(new Event('change', { bubbles: true })); await sakinBekle(); }
+      }
+    };
+    const bolumler = async kok => {
+      const l = [...kok.querySelectorAll('[aria-expanded=false], details:not([open]) > summary')].filter(e => !bizim(e) && !e.matches(SEKME) && e.getAttribute('aria-haspopup') !== 'menu');
+      for (const el of l.slice(0, 20)) await tikla(el, 'kapalı bölüm');
+    };
+    olay('kesif', { basladi: true, baslik: document.title });
+    try {
+      // 1 açık pencere varsa önce onun sekmeleri
+      const p0 = acikPencere();
+      if (p0) await sekmeler(p0, 'pencere');
+      // 2 sayfa sekmeleri, filtre listeleri, kapalı bölümler
+      await sekmeler(document.body, 'sayfa');
+      await listeler(document.body);
+      await bolumler(document.body);
+      // 3 sayfalama: ikinci sayfa
+      for (const p of [...document.querySelectorAll('.pagination, .pager, nav[aria-label*="age" i], nav[aria-label*="sayfa" i], [class*="paginat" i]')].filter(e => !bizim(e) && gorunur(e)).slice(0, 2)) {
+        const iki = [...p.querySelectorAll('a, button')].find(e => (e.textContent || '').trim() === '2') || [...p.querySelectorAll('a, button')].find(e => /^(›|»|>|sonraki|next|ileri)$/i.test((e.textContent || e.getAttribute('aria-label') || '').trim()));
+        if (iki) await tikla(iki, 'ikinci sayfa');
+      }
+      // 4 tekrarlanan kartlar: her kalıbın ilk kartında ilk güvenli düğme; pencere açılırsa sekmeleri, sonra kapat
+      // Sınıfsız genel kalıp (DIV.) atlanır: rastgele düğmeye basılmasın
+      for (const k of kaliplar(document.body).filter(x => !/\.$/.test(x.imza)).slice(0, 5)) {
+        if (!devam()) break;
+        let kap; try { kap = document.querySelector(k.kapsayici); } catch (e) { kap = null; }
+        if (!kap) continue;
+        const kart = [...kap.children].find(c => c.tagName + '.' + [...c.classList].filter(x => !OYNAK.test(x)).sort().join('.') === k.imza);
+        if (!kart) continue;
+        const dugme = [...kart.querySelectorAll(TIK)].find(guvenliMi);
+        if (!dugme || !(await tikla(dugme, 'kart'))) continue;
+        const p = acikPencere();
+        if (p) { await sekmeler(p, 'pencere'); if (devam()) { pencereKapat(p); await sakinBekle(); } }
+      }
+    } catch (e) {
+      olay('hata', { kaynak: 'keşif', mesaj: kirp(String(e && e.message || e), 300) });
+    } finally {
+      Object.assign(window, asil);
+      kesifte = false;
+      const neden = kesifDur ? 'durduruldu' : adresYok() !== adres0 ? 'adres değişti' : adim >= KESIF_SINIR ? 'adım sınırı' : 'bitti';
+      olay('kesif', { bitti: true, adim, atlanan, neden });
+      kesifBildir('Keşif ' + neden + ': ' + adim + ' adım, ' + atlanan + ' frenli/güvensiz atlandı');
+      haritaImzalari.clear(); haritaKaydet('keşif sonu');
+    }
+  }
+
+  // ------------------------------------------------ TOPLAYICI
+  // Kaydedilmiş bir isteği değişken listesiyle yeniden çağırır: "yil=2015-2026; sayfa=1-45" ya da "yil=2024,2025".
+  // İlk değişken dış döngüdür. İlerleme localStorage'da tutulur; oturum düşerse Sürdür kaldığı yerden devam eder.
+  const TOPLA = 'webAjani:toplama';
+  let toplamada = false, toplamaDur = false;
+  function degiskenCoz(metin) {
+    const l = [];
+    for (const parca of String(metin || '').split(/[;\n]/)) {
+      const m = parca.match(/^\s*([^=\s]+)\s*=\s*(.+?)\s*$/);
+      if (!m) continue;
+      const degerler = [];
+      for (const d of m[2].split(',')) {
+        const a = d.trim().match(/^(-?\d+)\s*-\s*(-?\d+)$/);
+        if (a) { const x = +a[1], y = +a[2], ad = x <= y ? 1 : -1; for (let i = x; ad > 0 ? i <= y : i >= y; i += ad) { degerler.push(String(i)); if (degerler.length > 5000) break; } }
+        else if (d.trim()) degerler.push(d.trim());
+      }
+      if (degerler.length) l.push({ ad: m[1], degerler });
+    }
+    return l;
+  }
+  function kombinasyonlar(l) {
+    let k = [{}];
+    for (const { ad, degerler } of l) { const y = []; for (const o of k) for (const d of degerler) y.push(Object.assign({}, o, { [ad]: d })); k = y; if (k.length > 20000) break; }
+    return k.slice(0, 20000);
+  }
+  // Gizlenmiş değer ("<gizli>") sayfadaki aynı adlı gizli alandan ya da csrf meta etiketinden alınır.
+  function gizliDoldur(ad) {
+    const i = document.querySelector('input[name="' + ad.replace(/"/g, '') + '"]');
+    if (i && i.value) return i.value;
+    if (/verification|csrf|xsrf|token/i.test(ad)) {
+      const v = document.querySelector('input[name=__RequestVerificationToken], input[name*=csrf i], input[name*=token i]');
+      if (v && v.value) return v.value;
+      const m = document.querySelector('meta[name*=csrf i], meta[name*=token i]');
+      if (m && m.content) return m.content;
+    }
+    return null;
+  }
+  function istekKur(ornek, degerler) {
+    const u = new URL(ornek.adres, location.href);
+    let govde = ornek.istek || null, json = false;
+    const bilinmeyen = [];
+    let govdeNesne = null, govdeForm = null;
+    if (govde) {
+      try { govdeNesne = JSON.parse(govde); json = true; } catch (e) { if (/=/.test(govde)) govdeForm = new URLSearchParams(govde); }
+    }
+    for (const [k, v] of Object.entries(degerler)) {
+      if (govdeNesne && typeof govdeNesne === 'object' && k in govdeNesne) govdeNesne[k] = isNaN(v) || typeof govdeNesne[k] === 'string' ? v : +v;
+      else if (govdeForm && govdeForm.has(k)) govdeForm.set(k, v);
+      else u.searchParams.set(k, v);
+    }
+    for (const [k, v] of [...u.searchParams]) if (v === '<gizli>') { const g = gizliDoldur(k); if (g == null) bilinmeyen.push(k); else u.searchParams.set(k, g); }
+    if (govdeForm) for (const [k, v] of [...govdeForm]) if (v === '<gizli>') { const g = gizliDoldur(k); if (g == null) bilinmeyen.push(k); else govdeForm.set(k, g); }
+    if (govdeNesne && typeof govdeNesne === 'object') for (const k of Object.keys(govdeNesne)) if (govdeNesne[k] === '<gizli>') { const g = gizliDoldur(k); if (g == null) bilinmeyen.push(k); else govdeNesne[k] = g; }
+    const basliklar = {};
+    for (const [k, v] of Object.entries(ornek.basliklar || {})) {
+      if (v === '<gizli>') { const g = gizliDoldur(k); if (g == null) bilinmeyen.push(k + ' (başlık)'); else basliklar[k] = g; }
+      else if (!/^(content-length|host|origin|referer|cookie)$/i.test(k)) basliklar[k] = v;
+    }
+    govde = govdeNesne ? JSON.stringify(govdeNesne) : govdeForm ? govdeForm.toString() : (ornek.yontem === 'GET' ? null : govde);
+    if (govdeForm && !Object.keys(basliklar).some(k => k === 'content-type')) basliklar['content-type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    if (json && !Object.keys(basliklar).some(k => k === 'content-type')) basliklar['content-type'] = 'application/json';
+    return { adres: u.href, yontem: ornek.yontem, govde, basliklar, bilinmeyen };
+  }
+  function oturumDustuMu(r, metin, ornek) {
+    if (r.status === 401 || r.status === 403 || r.status === 419 || r.status === 440) return 'durum ' + r.status;
+    if (r.redirected && /login|giris|giriş|oturum|account|signin|auth/i.test(r.url)) return 'giriş sayfasına yönlendi';
+    const tur = r.headers.get('content-type') || '';
+    if (/json/i.test(ornek.icerikTuru || '') && /html/i.test(tur)) return 'JSON yerine HTML geldi';
+    if (/html/i.test(tur) && /type=["']?password/i.test(metin || '') && !/type=["']?password/i.test(ornek.yanit || '')) return 'yanıtta giriş formu var';
+    return null;
+  }
+  async function toplayiciBaslat(ornek, degiskenMetni, aralik, surdur) {
+    if (toplamada || !acikMi('toplayici')) return;
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(TOPLA)); } catch (e) {}
+    if (!surdur || !d || !d.ornek) {
+      const l = degiskenCoz(degiskenMetni);
+      if (!l.length) { toplamaBildir('Değişken yok: örnek "yil=2015-2026; sayfa=1-45"'); return; }
+      d = { ornek, degiskenMetni, aralik: Math.max(300, +aralik || 1500), sira: 0, toplam: kombinasyonlar(l).length, basladi: new Date().toISOString(), hataArka: 0 };
+    }
+    const liste = kombinasyonlar(degiskenCoz(d.degiskenMetni));
+    toplamada = true; toplamaDur = false;
+    olay('toplama', { basladi: true, istek: d.ornek.yontem + ' ' + d.ornek.adres.split('?')[0], degiskenler: d.degiskenMetni, toplam: liste.length, sira: d.sira, surdur: !!surdur });
+    let neden = 'bitti';
+    try {
+      while (d.sira < liste.length) {
+        if (toplamaDur) { neden = 'durduruldu'; break; }
+        const degerler = liste[d.sira];
+        const k = istekKur(d.ornek, degerler);
+        if (k.bilinmeyen.length) { neden = 'gizli değer bulunamadı: ' + k.bilinmeyen.join(', '); break; }
+        toplamaBildir((d.sira + 1) + ' / ' + liste.length + ' · ' + Object.entries(degerler).map(([a, b]) => a + '=' + b).join(' '));
+        let r, metin = null, hata = null;
+        const t = performance.now();
+        try {
+          r = await ASIL_FETCH.call(window, k.adres, { method: k.yontem, headers: k.basliklar, body: k.govde, credentials: 'same-origin' });
+          metin = await r.text();
+        } catch (e) { hata = String(e && e.message || e); }
+        const dusme = r ? oturumDustuMu(r, metin, d.ornek) : null;
+        olay('toplama', { degerler, durum: r ? r.status : 0, icerikTuru: r ? r.headers.get('content-type') || '' : '', sure: Math.round(performance.now() - t), boyut: metin ? metin.length : 0, yanit: dusme ? undefined : (metin || '').slice(0, 2 * 1024 * 1024), hata: hata || dusme || undefined });
+        if (dusme) { neden = 'oturum düştü (' + dusme + '); giriş yap, sonra Sürdür'; break; }
+        if (hata || r.status >= 400) { d.hataArka++; if (d.hataArka >= 3) { neden = 'arka arkaya 3 hata (' + (hata || r.status) + ')'; d.sira++; break; } }
+        else d.hataArka = 0;
+        d.sira++;
+        try { localStorage.setItem(TOPLA, JSON.stringify(d)); } catch (e) {}
+        await bekle(d.aralik);
+      }
+    } finally {
+      toplamada = false;
+      try { localStorage.setItem(TOPLA, JSON.stringify(d)); } catch (e) {}
+      olay('toplama', { bitti: true, neden, sira: d.sira, toplam: liste.length });
+      await bosalt();
+      toplamaBildir('Toplama ' + neden + ' · ' + d.sira + ' / ' + liste.length);
+    }
+  }
+  function adresleriListele() {
+    return hepsiniOku().then(l => {
+      const o = new Map();
+      for (const x of l) if (x.tur === 'istek' && x.durum >= 200 && x.durum < 300) o.set(x.yontem + ' ' + x.adres.split('?')[0], x);
+      return [...o.entries()];
+    });
+  }
+
+  // ------------------------------------------------ SAYFA FOTOKOPİSİ: sade metin (Markdown benzeri)
+  function fotokopi(kok) {
+    kok = kok || acikPencere() || document.body;
+    const satirlar = [];
+    const yaz = t => { t = t.replace(/[ \t]+/g, ' ').trim(); if (t) satirlar.push(t); };
+    const satirIci = el => {
+      let t = '';
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3) t += n.textContent;
+        else if (n.nodeType === 1) {
+          if (bizim(n) || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG)$/i.test(n.tagName) || !n.getClientRects().length) continue;
+          if (n.tagName === 'A' && n.getAttribute('href')) t += '[' + kirp(n.textContent, 80) + '](' + kirp(n.getAttribute('href'), 120) + ')';
+          else if (n.tagName === 'BUTTON' || n.getAttribute('role') === 'button') t += ' [düğme: ' + kirp(n.textContent || n.getAttribute('aria-label') || '', 40) + '] ';
+          else if (n.tagName === 'INPUT' || n.tagName === 'SELECT' || n.tagName === 'TEXTAREA') t += ' [alan: ' + kirp(etiketBul(n) || n.getAttribute('placeholder') || n.name || '', 40) + '] ';
+          else if (n.tagName === 'BR') t += ' ';
+          else t += satirIci(n);
+        }
+      }
+      return t;
+    };
+    const BLOK = /^(P|DIV|SECTION|ARTICLE|MAIN|ASIDE|HEADER|FOOTER|NAV|LI|UL|OL|DL|DT|DD|FORM|FIELDSET|TABLE|H[1-6]|BLOCKQUOTE|PRE|FIGURE|DETAILS|SUMMARY)$/;
+    const gez = el => {
+      for (const n of el.children) {
+        if (bizim(n) || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|IFRAME)$/i.test(n.tagName) || !n.getClientRects().length) continue;
+        const t = n.tagName;
+        if (/^H[1-6]$/.test(t)) { yaz('#'.repeat(+t[1]) + ' ' + satirIci(n)); continue; }
+        if (t === 'TABLE') {
+          const sat = [...n.querySelectorAll('tr')].slice(0, 300).map(tr => '| ' + [...tr.children].map(c => kirp(c.innerText, 80).replace(/\|/g, '/')).join(' | ') + ' |');
+          if (sat.length) { satirlar.push(sat[0]); satirlar.push('|' + ' --- |'.repeat(sat[0].split(' | ').length)); satirlar.push(...sat.slice(1)); }
+          continue;
+        }
+        if (t === 'LI') { yaz('- ' + satirIci(n)); continue; }
+        if (t === 'PRE') { satirlar.push('```', n.innerText.slice(0, 4000), '```'); continue; }
+        if ([...n.children].some(c => BLOK.test(c.tagName))) gez(n);
+        else yaz(satirIci(n));
+        if (satirlar.join('\n').length > 200000) return;
+      }
+    };
+    gez(kok);
+    return satirlar.join('\n').replace(/\n{3,}/g, '\n\n').slice(0, 200000);
+  }
+
   // ------------------------------------------------ DIŞA AKTARMA
   function indir() {
     return hepsiniOku().then(olaylar => {
@@ -561,7 +891,12 @@
     button{background:#1d4ed8;color:#fff;border:0;border-radius:6px;padding:5px 8px;font:12px system-ui,sans-serif;cursor:pointer}
     button.i{background:#334155}
     .s{color:#94a3b8;font-size:11px;margin-top:6px;word-break:break-all}
-    .n{color:#fbbf24;font-size:11px;min-height:14px;margin-top:4px;word-break:break-all}`;
+    .n{color:#fbbf24;font-size:11px;min-height:14px;margin-top:4px;word-break:break-all}
+    details{margin:4px 0}summary{cursor:pointer;color:#cbd5e1}
+    .k{border-top:1px solid #334155;margin-top:8px;padding-top:6px}
+    .k b{font-size:12px;color:#f8fafc}
+    select,input.tv,input.tb{width:100%;box-sizing:border-box;margin-top:4px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:4px;font:12px system-ui,sans-serif}
+    label.sat{display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8}label.sat input{width:90px}`;
   function panelKur() {
     if (kok || !document.body || CERCEVE) return;
     kok = document.createElement('div'); kok.id = KOK_ID;
@@ -572,31 +907,64 @@
   }
   function panelAcKapa() {
     const g = kok.shadowRoot;
-    if (govde) { govde.remove(); govde = null; return; }
+    if (govde) { govde.remove(); govde = null; kesifEl = toplaEl = null; return; }
     govde = document.createElement('div'); govde.className = 'p';
+    let td = null; try { td = JSON.parse(localStorage.getItem(TOPLA)); } catch (e) {}
     govde.innerHTML = '<h4>Web Ajanı ' + SURUM + ' · ' + host + '</h4>' +
-      MODULLER.map(([k, ad, not]) => '<label><input type="checkbox" data-m="' + k + '"' + (acikMi(k) ? ' checked' : '') + '><span>' + ad + '<small>' + not + '</small></span></label>').join('') +
-      '<div class="b"><button data-e="isaret">İşaretle</button><button data-e="tasarim">Tasarımı oku</button><button data-e="harita">Sayfayı tara</button><button data-e="indir">İndir</button></div>' +
+      '<details><summary>Modüller</summary>' +
+      MODULLER.map(([k, ad, not]) => '<label><input type="checkbox" data-m="' + k + '"' + (acikMi(k) ? ' checked' : '') + '><span>' + ad + '<small>' + not + '</small></span></label>').join('') + '</details>' +
+      '<div class="b"><button data-e="isaret">İşaretle</button><button data-e="tasarim">Tasarımı oku</button><button data-e="harita">Sayfayı tara</button><button data-e="fotokopi">Fotokopi</button><button data-e="indir">İndir</button></div>' +
+      (acikMi('kesif') ? '<div class="k"><b>Keşif</b><div class="b"><button data-e="kesfet">Keşfet</button><button class="i" data-e="kesifdur">Durdur</button></div><div class="n kn"></div></div>' : '') +
+      (acikMi('toplayici') ? '<div class="k"><b>Toplayıcı</b><select class="ta"><option value="">Veri adresi seç (önce sayfada gez)</option></select>' +
+        '<input class="tv" placeholder="yil=2015-2026; sayfa=1-45"><label class="sat">Bekleme ms <input class="tb" type="number" value="1500" min="300" step="100"></label>' +
+        '<div class="b"><button data-e="topla">Başlat</button><button class="i" data-e="topladur">Durdur</button>' + (td && td.ornek && td.sira < td.toplam ? '<button data-e="toplasurdur">Sürdür (' + td.sira + '/' + td.toplam + ')</button>' : '') + '</div><div class="n tn"></div></div>' : '') +
       '<div class="b"><button class="i" data-e="sifirla">Kaydı sil</button><button class="i" data-e="kapat">Bu sitede kapat</button></div>' +
       '<div class="s"></div><div class="n"></div>';
     g.appendChild(govde);
-    sayEl = govde.querySelector('.s'); durumEl = govde.querySelector('.n');
+    sayEl = govde.querySelector('.s'); durumEl = govde.querySelector('.n:last-child');
+    kesifEl = govde.querySelector('.kn'); toplaEl = govde.querySelector('.tn');
     panelSay();
+    const sec = govde.querySelector('.ta');
+    let adresler = [];
+    if (sec) adresleriListele().then(l => {
+      adresler = l;
+      for (const [ad] of l) { const o = document.createElement('option'); o.value = ad; o.textContent = ad; sec.appendChild(o); }
+      if (td && td.ornek) { sec.value = td.ornek.yontem + ' ' + td.ornek.adres.split('?')[0]; govde.querySelector('.tv').value = td.degiskenMetni || ''; }
+    });
     govde.addEventListener('change', e => {
       const m = e.target.getAttribute('data-m'); if (!m) return;
       ayar.moduller[m] = e.target.checked; ayarYaz();
       if (m === 'ag' || m === 'hata') panelBildir('Ağ ve hata kancası sayfa yenilenince değişir');
+      if (m === 'kesif' || m === 'toplayici') { panelAcKapa(); panelAcKapa(); }
     });
     govde.addEventListener('click', e => {
       const a = e.target.getAttribute('data-e'); if (!a) return;
       if (a === 'isaret') { if (!acikMi('isaretci')) return panelBildir('Öğe işaretçi kapalı'); govde.remove(); govde = null; isaretciAc(); }
       else if (a === 'tasarim') { if (!acikMi('tasarim')) return panelBildir('Tasarım okuyucu kapalı'); sayfaTasarimi(); panelBildir('Sayfa tasarımı kaydedildi'); }
       else if (a === 'harita') { haritaImzalari.clear(); haritaKaydet('elle'); panelBildir('Sayfa tarandı'); }
+      else if (a === 'fotokopi') {
+        if (!acikMi('fotokopi')) return panelBildir('Sayfa fotokopisi kapalı');
+        const m = fotokopi();
+        olay('fotokopi', { baslik: document.title, metin: m });
+        try { navigator.clipboard.writeText(m).then(() => panelBildir('Fotokopi kaydedildi ve panoya kopyalandı (' + m.length + ' karakter)'), () => panelBildir('Fotokopi kaydedildi (' + m.length + ' karakter)')); } catch (x) { panelBildir('Fotokopi kaydedildi'); }
+      }
       else if (a === 'indir') indir();
-      else if (a === 'sifirla') { if (confirm('Bu sitedeki Web Ajanı kaydı silinsin mi?')) temizle().then(() => { for (const k of Object.keys(sayac)) sayac[k] = 0; haritaImzalari.clear(); panelSay(); panelBildir('Kayıt silindi'); }); }
+      else if (a === 'kesfet') kesfet();
+      else if (a === 'kesifdur') { kesifDur = true; kesifBildir('Durduruluyor…'); }
+      else if (a === 'topla') {
+        const x = adresler.find(([ad]) => ad === sec.value);
+        if (!x) return toplamaBildir('Önce listeden bir veri adresi seç');
+        toplayiciBaslat(x[1], govde.querySelector('.tv').value, govde.querySelector('.tb').value, false);
+      }
+      else if (a === 'toplasurdur') toplayiciBaslat(null, '', 0, true);
+      else if (a === 'topladur') { toplamaDur = true; toplamaBildir('Durduruluyor…'); }
+      else if (a === 'sifirla') { if (confirm('Bu sitedeki Web Ajanı kaydı silinsin mi?')) temizle().then(() => { for (const k of Object.keys(sayac)) sayac[k] = 0; haritaImzalari.clear(); try { localStorage.removeItem(TOPLA); } catch (x) {} panelSay(); panelBildir('Kayıt silindi'); }); }
       else if (a === 'kapat') { try { localStorage.setItem(IZIN, '0'); } catch (x) {} location.reload(); }
     });
   }
+  let kesifEl = null, toplaEl = null;
+  function kesifBildir(t) { if (kesifEl) kesifEl.textContent = t; panelDurum(kesifte ? 'Keşif: ' + t : ''); }
+  function toplamaBildir(t) { if (toplaEl) toplaEl.textContent = t; panelDurum(toplamada ? 'Toplama: ' + t : ''); }
   function panelSay() {
     if (!sayEl) return;
     sayEl.textContent = 'Bu oturumda: ' + sayac.toplam + ' kayıt · ' + (sayac.tik || 0) + ' tık · ' + (sayac.istek || 0) + ' istek · ' + (sayac.harita || 0) + ' harita · ' + (sayac.hata || 0) + ' hata · ' + (sayac.isaret || 0) + ' işaret';
@@ -623,5 +991,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hazir); else hazir();
   const kurulumMs = performance.now() - T0;
   // Sınama ve konsol için: sayfadan erişilen tek ad.
-  window.__webAjani = { surum: SURUM, kurulumMs: () => kurulumMs, indir, isaretciAc, sayfaTasarimi, haritaKaydet, hepsiniOku, bosalt, temizle };
+  window.__webAjani = { surum: SURUM, kurulumMs: () => kurulumMs, indir, isaretciAc, sayfaTasarimi, haritaKaydet, hepsiniOku, bosalt, temizle,
+    kesfet, kesifteMi: () => kesifte, toplayiciBaslat, toplamadaMi: () => toplamada, adresleriListele, fotokopi, degiskenCoz, istekKur };
 })();

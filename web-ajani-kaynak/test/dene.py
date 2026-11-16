@@ -12,6 +12,8 @@ sahte = open(os.path.join(KLASOR, 'sahte_enabiz.html'), encoding='utf-8').read()
 GIZLI_DEGER = 'TANSIYON-GIZLI-123'
 PAROLA = 'Parola-Gizli-987'
 sonuc = {}
+TAHLIL = []
+OTURUM = {'dustu': False}
 
 
 def kontrol(ad, kosul, ek=''):
@@ -24,6 +26,23 @@ def yonlendir(route):
     yol = u.split('://', 1)[1].split('/', 1)[1] if '/' in u.split('://', 1)[1] else ''
     if yol.startswith('api/ziyaret'):
         route.fulfill(status=200, content_type='application/json', body=json.dumps({'tani': 'Hipertansiyon', 'deger': GIZLI_DEGER, 'ilaclar': [{'ad': 'X', 'doz': 1}]}))
+    elif yol.startswith('api/liste'):
+        from urllib.parse import urlsplit, parse_qs
+        q = parse_qs(urlsplit(u).query)
+        route.fulfill(status=200, content_type='application/json', body=json.dumps({'yil': q.get('yil', ['2025'])[0], 'sayfa': int(q.get('sayfa', ['1'])[0]), 'kayitlar': [{'tani': GIZLI_DEGER}]}))
+    elif yol.startswith('api/tahlil'):
+        from urllib.parse import parse_qs
+        govde = parse_qs(route.request.post_data or '')
+        b = route.request.headers
+        yil = govde.get('yil', ['?'])[0]
+        TAHLIL.append(yil)
+        if govde.get('__RequestVerificationToken') != ['TOKEN-ABC'] or b.get('requestverificationtoken') != 'TOKEN-ABC' or b.get('x-requested-with') != 'XMLHttpRequest':
+            route.fulfill(status=400, content_type='text/plain', body='jeton yok')
+        elif yil == '2020' and not OTURUM['dustu']:
+            OTURUM['dustu'] = True
+            route.fulfill(status=401, content_type='text/plain', body='oturum yok')
+        else:
+            route.fulfill(status=200, content_type='application/json', body=json.dumps({'yil': yil, 'tahliller': [{'ad': 'Glukoz', 'deger': GIZLI_DEGER}]}))
     elif yol.startswith('api/bozuk'):
         route.fulfill(status=500, content_type='text/plain', body='sunucu hatası')
     elif yol.startswith('api/giris'):
@@ -163,6 +182,60 @@ with sync_playwright() as p:
     tik_sil = [o for o in k if o['tur'] == 'tik' and o['oge'].get('secici') == '#silBtn']
     kontrol('işaret tıklaması tık sayılmaz', not tik_sil)
 
+    # 7b · otomatik keşif (sayfaya geri dön: tek sayfa geçişi adresi değiştirdi)
+    s.goto('http://enabiz.gov.tr/Home/Ziyaretler'); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(800)
+    s.evaluate("window.__webAjani.bosalt()")
+    once = len(kayitlar(s))
+    t0 = time.time()
+    s.evaluate("window.__webAjani.kesfet()")
+    s.wait_for_function("!window.__webAjani.kesifteMi()", timeout=120000)
+    kesif_sure = time.time() - t0
+    s.evaluate("window.__webAjani.bosalt()")
+    k = kayitlar(s)[once:]
+    ktik = [o['oge']['metin'] for o in k if o['tur'] == 'tik' and o.get('kesif')]
+    son = [o for o in k if o['tur'] == 'kesif' and o.get('bitti')]
+    kontrol('keşif bitti', son and son[-1]['neden'] == 'bitti', son and son[-1])
+    kontrol('keşif sayfa sekmesi', 'Acil' in ktik, ktik)
+    kontrol('keşif kapalı bölüm ve ayrıntı', 'Ek bilgiler' in ktik and 'Ayrıntılar' in ktik)
+    kontrol('keşif ikinci sayfa', '2' in ktik and any(o['tur'] == 'istek' and 'sayfa=2' in o['adres'] for o in k))
+    kontrol('keşif yıl seçenekleri', len([o for o in k if o['tur'] == 'degisim' and o.get('kesif')]) == 5 and s.evaluate("document.getElementById('yil').value") == '2025')
+    kontrol('keşif kart penceresi ve sekmeleri', 'Detay' in ktik and 'İlaç' in ktik and 'Tahlil' in ktik and 'Kapat' in ktik and not s.evaluate("document.getElementById('detay').classList.contains('show')"), ktik)
+    kontrol('keşif frenliye basmadı', s.evaluate("window.silindi") == 0 and not {'Sil', 'Evaluate', 'Hide in Share'} & set(ktik))
+    kontrol('keşif form göndermedi, sayfadan çıkmadı', s.evaluate("window.gonderildi") == 0 and 'Ara' not in ktik and s.evaluate("location.pathname") == '/Home/Ziyaretler')
+    kontrol('keşif menü bağlantısına basmadı', not {'Ziyaretlerim', 'Tahlillerim', 'Reçetelerim'} & set(ktik))
+    kontrol('keşif 60 sn altında', kesif_sure < 60, '%.1f sn, %d adım' % (kesif_sure, son[-1]['adim'] if son else -1))
+    # confirm engeli: keşif sürerken sayfanın sorduğu soru "hayır" alır
+    s.evaluate("window.__kesifConfirmDene = () => { const a = window.confirm('Arşivlensin mi?'); return a; }")
+    kontrol('keşif dışında confirm sayfanın', s.evaluate("typeof window.confirm") == 'function')
+
+    # 7c · toplayıcı: kaydedilen POST isteği yıllar için; jeton sayfadan, oturum düşünce durur, Sürdür devam eder
+    s.click('#tahlilBtn'); s.wait_for_timeout(800)
+    s.evaluate("window.__webAjani.bosalt()")
+    adr = s.evaluate("window.__webAjani.adresleriListele().then(l => l.map(x => x[0]))")
+    kontrol('toplayıcı adres listesi', 'POST /api/tahlil' in adr and 'GET /api/liste' in adr, adr)
+    ornek = [o for o in kayitlar(s) if o['tur'] == 'istek' and o['adres'] == '/api/tahlil'][-1]
+    kontrol('kayıtta jeton gizli, başlık adı var', '__RequestVerificationToken=%3Cgizli%3E' in ornek['istek'] and ornek['basliklar'].get('requestverificationtoken') == '<gizli>' and ornek['basliklar'].get('x-requested-with') == 'XMLHttpRequest')
+    TAHLIL.clear()
+    s.evaluate("window.__webAjani.adresleriListele().then(l => window.__webAjani.toplayiciBaslat(l.find(x => x[0] === 'POST /api/tahlil')[1], 'yil=2018-2021', 300, false))")
+    s.wait_for_function("!window.__webAjani.toplamadaMi()", timeout=60000)
+    st = s.evaluate("JSON.parse(localStorage.getItem('webAjani:toplama'))")
+    kontrol('toplayıcı oturum düşünce durdu', st['sira'] == 2 and st['toplam'] == 4 and TAHLIL == ['2018', '2019', '2020'], (st['sira'], TAHLIL))
+    s.evaluate("window.__webAjani.toplayiciBaslat(null, '', 0, true)")
+    s.wait_for_function("!window.__webAjani.toplamadaMi()", timeout=60000)
+    s.evaluate("window.__webAjani.bosalt()")
+    st = s.evaluate("JSON.parse(localStorage.getItem('webAjani:toplama'))")
+    top = [o for o in kayitlar(s) if o['tur'] == 'toplama' and o.get('degerler')]
+    iyi = [o for o in top if o['durum'] == 200]
+    kontrol('toplayıcı Sürdür ile bitti', st['sira'] == 4 and [o['degerler']['yil'] for o in iyi] == ['2018', '2019', '2020', '2021'], [o['degerler'] for o in iyi])
+    kontrol('toplanan yanıt değeriyle', all(GIZLI_DEGER in o.get('yanit', '') for o in iyi))
+    kontrol('düşen istekte yanıt saklanmadı', any(o['durum'] == 401 and 'yanit' not in o and 'durum 401' in o.get('hata', '') for o in top), [(o['durum'], o.get('hata'), 'yanit' in o) for o in top])
+    kontrol('değişken çözümü', s.evaluate("JSON.stringify(window.__webAjani.degiskenCoz('yil=2024-2022; sayfa=1,3'))") == '[{"ad":"yil","degerler":["2024","2023","2022"]},{"ad":"sayfa","degerler":["1","3"]}]')
+
+    # 7d · sayfa fotokopisi
+    fk = s.evaluate("window.__webAjani.fotokopi(document.body)")
+    kontrol('fotokopi tablo ve başlık', '| Tarih | Hastane | Klinik | Hekim |' in fk and '##### Ziyaret' in fk and '[Ziyaretlerim](/Home/Ziyaretler)' in fk, len(fk))
+    kontrol('fotokopi panel metnini almaz', 'Web Ajanı' not in fk and 'Bu oturumda' not in fk)
+
     # 8 · panel ve indirme
     s.evaluate("document.getElementById('web-ajani-kok').shadowRoot.querySelector('.d').click()")
     kontrol('panel açılır', s.evaluate("!!document.getElementById('web-ajani-kok').shadowRoot.querySelector('.p')"))
@@ -203,6 +276,11 @@ kontrol('özette sağlık değeri yok', GIZLI_DEGER not in oz.stdout and 'Hipert
 kontrol('özette parola yok', PAROLA not in oz.stdout)
 kontrol('özette kapsama', 'denenmedi:' in oz.stdout)
 kontrol('özette uzun kimlik gizli', 'ABCDEF1234567890XYZ' not in oz.stdout)
+kontrol('özette keşif ve toplama', '## Otomatik keşif' in oz.stdout and '## Toplama' in oz.stdout and 'Bitti: bitti · 4 / 4' in oz.stdout)
+kontrol('özet toplanan değeri göstermez', GIZLI_DEGER not in oz.stdout)
+ck = subprocess.run([sys.executable, os.path.join(KLASOR, '..', 'cikar.py'), dosya, os.path.join(OUT, 'tahlil.jsonl'), '--istek', 'POST /api/tahlil'], capture_output=True, text=True)
+satir = [json.loads(x) for x in open(os.path.join(OUT, 'tahlil.jsonl'), encoding='utf-8')] if ck.returncode == 0 else []
+kontrol('cikar.py ham yanıtları çıkarır', [x['degerler']['yil'] for x in satir] == ['2018', '2019', '2020', '2021'] and satir[0]['json']['tahliller'][0]['deger'] == GIZLI_DEGER, ck.stdout.strip() + ck.stderr[-200:])
 print('Özet: %d satır, %d bayt; kayıt dosyası %d bayt' % (oz.stdout.count('\n'), len(oz.stdout.encode()), os.path.getsize(dosya)))
 gecen = sum(sonuc.values())
 print('SONUC: %d / %d' % (gecen, len(sonuc)))
