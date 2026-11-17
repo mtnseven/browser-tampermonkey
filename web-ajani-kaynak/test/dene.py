@@ -60,6 +60,26 @@ def kayitlar(s):
     return s.evaluate("window.__webAjani.hepsiniOku()")
 
 
+KOK = "document.getElementById('web-ajani-kok').shadowRoot"
+
+
+def panel(s, ifade):
+    return s.evaluate(KOK + ifade)
+
+
+def gez_bekle(s, sure=150):
+    # Gez sayfalar arasında gider gelir; başlangıç sayfasında, gez durumu silinmiş ve gez durmuş olunca biter
+    son = time.time() + sure
+    while time.time() < son:
+        try:
+            if s.evaluate("location.pathname === '/Home/Ziyaretler' && !!window.__webAjani && !window.__webAjani.kesifteMi() && !sessionStorage.getItem('webAjani:gez')"):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.3)
+    return False
+
+
 with sync_playwright() as p:
     tarayici = p.chromium.launch()
     ctx = tarayici.new_context(accept_downloads=True, viewport={'width': 1280, 'height': 900})
@@ -79,7 +99,9 @@ with sync_playwright() as p:
     s.wait_for_load_state('load'); s.wait_for_timeout(500)
     kontrol('Alt+Shift+W ile açılır', s.evaluate("!!window.__webAjani && !!document.getElementById('web-ajani-kok')"))
     s.evaluate("fetch('/api/ziyaret?yil=1').then(r => r.text())"); s.wait_for_timeout(300)
-    kontrol('profil dışı sitede ağ kaydı kapalı', not [o for o in kayitlar(s) if o['tur'] == 'istek'])
+    s.click('body'); s.evaluate("window.__webAjani.bosalt()")
+    kontrol('kayıt kapalıyken hiçbir şey kaydedilmez', not kayitlar(s))
+    kontrol('profil dışı sitede toplayıcı yok', not s.evaluate("(" + KOK + ".querySelector('[data-e=araclar]').click(), !!" + KOK + ".querySelector('.ta'))"))
     s.keyboard.press('Alt+Shift+KeyW')
     s.wait_for_load_state('load'); s.wait_for_timeout(300)
     kontrol('Alt+Shift+W ile kapanır', s.evaluate("!window.__webAjani"))
@@ -88,9 +110,16 @@ with sync_playwright() as p:
     s.goto('http://enabiz.gov.tr/Home/Ziyaretler')
     s.wait_for_function("window.__webAjani")
     s.wait_for_timeout(1200)
-    kontrol('panel düğmesi var', s.evaluate("!!document.getElementById('web-ajani-kok').shadowRoot.querySelector('.d')"))
+    kontrol('panel: Kaydı başlat görünür, Durdur gizli', panel(s, ".querySelector('[data-e=baslat]').hidden === false && " + KOK + ".querySelector('[data-e=durdur]').hidden === true"))
+    kontrol('panel: sayaç kayıt kapalı der', 'kayıt kapalı' in panel(s, ".querySelector('.say').textContent"))
     kurulum = s.evaluate("window.__webAjani.kurulumMs()")
     kontrol('kurulum 15 ms altında', kurulum < 15, '%.2f ms' % kurulum)
+    s.evaluate("window.__webAjani.bosalt()")
+    kontrol('kayıt başlamadan sayfa kaydedilmez', not kayitlar(s))
+    panel(s, ".querySelector('[data-e=baslat]').click()")
+    s.wait_for_function("window.__webAjani.kayittaMi()")
+    s.wait_for_timeout(400)
+    kontrol('Kaydı başlat → Durdur ve indir görünür', panel(s, ".querySelector('[data-e=durdur]').hidden === false && " + KOK + ".querySelector('[data-e=baslat]').hidden === true && " + KOK + ".querySelector('.bar').classList.contains('r')"))
     s.evaluate("window.__webAjani.bosalt()")
     k = kayitlar(s)
     h = [o for o in k if o['tur'] == 'harita']
@@ -132,6 +161,12 @@ with sync_playwright() as p:
     kontrol('pencere sekmeleri', any([x['metin'] for x in (a.get('harita') or {}).get('sekmeler', [])] == ['Tanı', 'İlaç', 'Tahlil'] for a in ac))
     dg = [o for o in k if o['tur'] == 'degisim' and o.get('secilen')]
     kontrol('yıl seçimi kaydı', dg and dg[-1]['secilen'] == '2023')
+    sy = s.evaluate("window.__webAjani.sayac()")
+    s.wait_for_timeout(1100)
+    yazi = panel(s, ".querySelector('.say').textContent")
+    kontrol('sayaç tık, sayfa, istek gösterir', sy['tik'] >= 2 and sy['istek'] >= 1 and ('%d tık' % sy['tik']) in yazi and 'KAYIT 00:0' in yazi, yazi)
+    kontrol('son kaydedilen satırı', panel(s, ".querySelector('.son').textContent").startswith('Kaydedildi'), panel(s, ".querySelector('.son').textContent"))
+    s.screenshot(path=os.path.join(OUT, 'panel_kayit.png'), clip={'x': 0, 'y': 780, 'width': 640, 'height': 120})
 
     # 4 · parola: değer hiçbir kayda girmez
     s.click('#kapatBtn')
@@ -162,6 +197,11 @@ with sync_playwright() as p:
     kontrol('betik hatası kaydı', any(o['tur'] == 'hata' and 'sahte betik hatası' in o.get('mesaj', '') for o in k))
     kontrol('başarısız istek kaydı', any(o['tur'] == 'hata' and '/api/bozuk' in o.get('mesaj', '') and '500' in o.get('mesaj', '') for o in k))
     kontrol('tek sayfa adres kaydı', any(o['tur'] == 'adres' and o['adres'] == '/Home/Tek' for o in k))
+    # kayıt sayfa yenilense de sürer, sayaç kaldığı yerden devam eder
+    once_say = s.evaluate("window.__webAjani.sayac()")
+    s.reload(); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(900)
+    sonra_say = s.evaluate("window.__webAjani.sayac()")
+    kontrol('kayıt sayfa yenilemesinde sürer', s.evaluate("window.__webAjani.kayittaMi()") and sonra_say['tik'] == once_say['tik'] and sonra_say['sayfa'] == once_say['sayfa'] + 1, (once_say, sonra_say))
 
     # 7 · öğe işaretçi ve tasarım
     s.evaluate("window.__webAjani.isaretciAc()")
@@ -182,28 +222,45 @@ with sync_playwright() as p:
     tik_sil = [o for o in k if o['tur'] == 'tik' and o['oge'].get('secici') == '#silBtn']
     kontrol('işaret tıklaması tık sayılmaz', not tik_sil)
 
-    # 7b · otomatik keşif (sayfaya geri dön: tek sayfa geçişi adresi değiştirdi)
+    # 7b · otomatik gez: sayfadaki her şey, sonra menü sayfaları (git, kaydet, dön); frenliye basmaz
     s.goto('http://enabiz.gov.tr/Home/Ziyaretler'); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(800)
     s.evaluate("window.__webAjani.bosalt()")
     once = len(kayitlar(s))
     t0 = time.time()
-    s.evaluate("window.__webAjani.kesfet()")
-    s.wait_for_function("!window.__webAjani.kesifteMi()", timeout=120000)
+    s.evaluate("void window.__webAjani.kesfet()")
+    s.wait_for_timeout(300)
+    kontrol('gez sürerken Gezmeyi durdur görünür', panel(s, ".querySelector('[data-e=gezdur]').hidden === false"))
+    bitti = gez_bekle(s)
     kesif_sure = time.time() - t0
+    s.wait_for_timeout(300)
     s.evaluate("window.__webAjani.bosalt()")
     k = kayitlar(s)[once:]
     ktik = [o['oge']['metin'] for o in k if o['tur'] == 'tik' and o.get('kesif')]
     son = [o for o in k if o['tur'] == 'kesif' and o.get('bitti')]
-    kontrol('keşif bitti', son and son[-1]['neden'] == 'bitti', son and son[-1])
-    kontrol('keşif sayfa sekmesi', 'Acil' in ktik, ktik)
-    kontrol('keşif kapalı bölüm ve ayrıntı', 'Ek bilgiler' in ktik and 'Ayrıntılar' in ktik)
-    kontrol('keşif ikinci sayfa', '2' in ktik and any(o['tur'] == 'istek' and 'sayfa=2' in o['adres'] for o in k))
-    kontrol('keşif yıl seçenekleri', len([o for o in k if o['tur'] == 'degisim' and o.get('kesif')]) == 5 and s.evaluate("document.getElementById('yil').value") == '2025')
-    kontrol('keşif kart penceresi ve sekmeleri', 'Detay' in ktik and 'İlaç' in ktik and 'Tahlil' in ktik and 'Kapat' in ktik and not s.evaluate("document.getElementById('detay').classList.contains('show')"), ktik)
-    kontrol('keşif frenliye basmadı', s.evaluate("window.silindi") == 0 and not {'Sil', 'Evaluate', 'Hide in Share'} & set(ktik))
-    kontrol('keşif form göndermedi, sayfadan çıkmadı', s.evaluate("window.gonderildi") == 0 and 'Ara' not in ktik and s.evaluate("location.pathname") == '/Home/Ziyaretler')
-    kontrol('keşif menü bağlantısına basmadı', not {'Ziyaretlerim', 'Tahlillerim', 'Reçetelerim'} & set(ktik))
-    kontrol('keşif 60 sn altında', kesif_sure < 60, '%.1f sn, %d adım' % (kesif_sure, son[-1]['adim'] if son else -1))
+    kontrol('gez bitti, başlangıç sayfasında', bitti and son and son[-1]['neden'] == 'bitti', son and son[-1])
+    kontrol('gez sayfa sekmesi', 'Acil' in ktik, ktik)
+    kontrol('gez kapalı bölüm ve ayrıntı', 'Ek bilgiler' in ktik and 'Ayrıntılar' in ktik)
+    kontrol('gez ikinci sayfa', '2' in ktik and any(o['tur'] == 'istek' and 'sayfa=2' in o['adres'] for o in k))
+    kontrol('gez yıl seçenekleri', len([o for o in k if o['tur'] == 'degisim' and o.get('kesif')]) == 5)
+    kontrol('gez kart penceresi ve sekmeleri', 'Detay' in ktik and 'İlaç' in ktik and 'Tahlil' in ktik and 'Kapat' in ktik, ktik)
+    kontrol('gez frenliye basmadı', not {'Sil', 'Evaluate', 'Hide in Share'} & set(ktik))
+    kontrol('gez form göndermedi', 'Ara' not in ktik)
+    ziy = [o['ziyaret'] for o in k if o['tur'] == 'kesif' and o.get('ziyaret')]
+    kontrol('gez menü sayfalarını gezip döndü', ziy == ['/Home/Tahliller', '/Home/Receteler'] and son and son[-1].get('gezilenSayfa') == 2, ziy)
+    kontrol('gezilen sayfanın haritası', any(o['tur'] == 'harita' and o['sayfa'] == '/Home/Receteler' for o in k))
+    kontrol('gez her öğeye bir kez bastı', len(ktik) == len(set(ktik)) or ktik.count('Detay') == 1, [x for x in set(ktik) if ktik.count(x) > 1])
+    kontrol('gez 90 sn altında', kesif_sure < 90, '%.1f sn, %d adım' % (kesif_sure, son[-1]['adim'] if son else -1))
+    # Gezmeyi durdur: anında durur, durum silinir, düğme gizlenir
+    s.evaluate("void window.__webAjani.kesfet()")
+    s.wait_for_timeout(1500)
+    t1 = time.time()
+    panel(s, ".querySelector('[data-e=gezdur]').click()")
+    s.wait_for_function("!window.__webAjani.kesifteMi()", timeout=5000)
+    dur_sure = time.time() - t1
+    s.wait_for_timeout(200)
+    kontrol('Gezmeyi durdur hemen durdurur', dur_sure < 1.5 and not s.evaluate("sessionStorage.getItem('webAjani:gez')") and panel(s, ".querySelector('[data-e=gezdur]').hidden") and 'durduruldu' in panel(s, ".querySelector('.son').textContent"), '%.2f sn · %s' % (dur_sure, panel(s, ".querySelector('.son').textContent")))
+    s.wait_for_timeout(1500)
+    kontrol('durdurduktan sonra tık yok', s.evaluate("location.pathname") == '/Home/Ziyaretler' and not s.evaluate("window.__webAjani.kesifteMi()"))
     # confirm engeli: keşif sürerken sayfanın sorduğu soru "hayır" alır
     s.evaluate("window.__kesifConfirmDene = () => { const a = window.confirm('Arşivlensin mi?'); return a; }")
     kontrol('keşif dışında confirm sayfanın', s.evaluate("typeof window.confirm") == 'function')
@@ -236,29 +293,38 @@ with sync_playwright() as p:
     kontrol('fotokopi tablo ve başlık', '| Tarih | Hastane | Klinik | Hekim |' in fk and '##### Ziyaret' in fk and '[Ziyaretlerim](/Home/Ziyaretler)' in fk, len(fk))
     kontrol('fotokopi panel metnini almaz', 'Web Ajanı' not in fk and 'Bu oturumda' not in fk)
 
-    # 8 · panel ve indirme
-    s.evaluate("document.getElementById('web-ajani-kok').shadowRoot.querySelector('.d').click()")
-    kontrol('panel açılır', s.evaluate("!!document.getElementById('web-ajani-kok').shadowRoot.querySelector('.p')"))
+    # 8 · Diğer araçlar ve Durdur ve indir
+    panel(s, ".querySelector('[data-e=araclar]').click()")
+    kontrol('Diğer araçlar açılır', panel(s, ".querySelectorAll('.ar [data-e]').length") >= 8)
+    s.wait_for_timeout(300)
+    s.screenshot(path=os.path.join(OUT, 'panel_araclar.png'), clip={'x': 0, 'y': 380, 'width': 640, 'height': 520})
     with s.expect_download() as ind:
-        s.evaluate("document.getElementById('web-ajani-kok').shadowRoot.querySelector('[data-e=indir]').click()")
+        panel(s, ".querySelector('[data-e=durdur]').click()")
     dosya = os.path.join(OUT, ind.value.suggested_filename)
     ind.value.save_as(dosya)
     veri = json.load(open(dosya, encoding='utf-8'))
-    kontrol('indirilen dosya', veri.get('arac') == 'Web Ajanı' and veri['olaySayisi'] > 10, ind.value.suggested_filename)
+    kontrol('indirilen dosya', veri.get('arac') == 'Web Ajanı' and veri['olaySayisi'] > 10 and veri['olaylar'][-1]['tur'] == 'kayit', ind.value.suggested_filename)
+    s.wait_for_timeout(300)
+    kontrol('Durdur sonrası kayıt kapalı, Kaydı başlat görünür', not s.evaluate("window.__webAjani.kayittaMi()") and panel(s, ".querySelector('[data-e=baslat]').hidden === false") and not s.evaluate("localStorage.getItem('webAjani:kayit')"))
+    kontrol('Durdur sonrası indirildi bildirimi', 'İndirildi' in panel(s, ".querySelector('.son').textContent"))
 
-    # 9 · sayfa yenilenince kayıt kalır
+    # 9 · kayıt kapalıyken tık kaydedilmez, yenilemede de kapalı kalır
+    n0 = len(kayitlar(s))
+    s.click('#akordeon'); s.wait_for_timeout(300)
     s.reload(); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(800)
-    k2 = kayitlar(s)
-    kontrol('kayıt sayfa yenilemesinde kalır', len(k2) >= veri['olaySayisi'])
+    kontrol('kayıt kapalıyken tık ve sayfa kaydedilmez', len(kayitlar(s)) == n0 and not s.evaluate("window.__webAjani.kayittaMi()"))
 
-    # 10 · modül kapatma: ağ kaydı kapalıysa fetch'e dokunulmaz
-    s.evaluate("localStorage.setItem('webAjani:ayar', JSON.stringify({moduller:{ag:false,hata:false}}))")
-    s.reload(); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(300)
-    kontrol('ağ ve hata kapalıyken fetch dokunulmamış', s.evaluate("/native code/.test(fetch.toString())"))
-    s.evaluate("localStorage.removeItem('webAjani:ayar')")
+    # 10 · telefon genişliğinde panel taşmaz
+    s.set_viewport_size({'width': 390, 'height': 800})
+    panel(s, ".querySelector('[data-e=baslat]').click()"); s.wait_for_function("window.__webAjani.kayittaMi()")
+    panel(s, ".querySelector('[data-e=araclar]').click()"); s.wait_for_timeout(1100)
+    kontrol('telefonda panel ekrana sığar', panel(s, ".querySelector('.c').getBoundingClientRect().right") <= 390)
+    s.screenshot(path=os.path.join(OUT, 'panel_telefon.png'))
+    s.set_viewport_size({'width': 1280, 'height': 900})
 
     # 11 · hız: büyük sayfada harita süresi
     s.goto('http://enabiz.gov.tr/buyuk'); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(1500)
+    kontrol('kayıt yeni sayfada da sürer', s.evaluate("window.__webAjani.kayittaMi()"))
     sure = s.evaluate("(() => { const t = performance.now(); window.__webAjani.haritaKaydet('ölçüm', document.body, 'ölçüm' + Math.random()); return performance.now() - t; })()")
     kontrol('büyük sayfa (4500 öğe) harita 400 ms altında', sure < 400, '%.0f ms' % sure)
     tik_sure = s.evaluate("""(async () => { const b = document.querySelectorAll('button')[700]; const t = performance.now(); b.click(); return performance.now() - t; })()""")
@@ -276,7 +342,7 @@ kontrol('özette sağlık değeri yok', GIZLI_DEGER not in oz.stdout and 'Hipert
 kontrol('özette parola yok', PAROLA not in oz.stdout)
 kontrol('özette kapsama', 'denenmedi:' in oz.stdout)
 kontrol('özette uzun kimlik gizli', 'ABCDEF1234567890XYZ' not in oz.stdout)
-kontrol('özette keşif ve toplama', '## Otomatik keşif' in oz.stdout and '## Toplama' in oz.stdout and 'Bitti: bitti · 4 / 4' in oz.stdout)
+kontrol('özette keşif ve toplama', '## Otomatik keşif' in oz.stdout and 'Gezilen sayfa: /Home/Receteler' in oz.stdout and '## Toplama' in oz.stdout and 'Bitti: bitti · 4 / 4' in oz.stdout)
 kontrol('özet toplanan değeri göstermez', GIZLI_DEGER not in oz.stdout)
 ck = subprocess.run([sys.executable, os.path.join(KLASOR, '..', 'cikar.py'), dosya, os.path.join(OUT, 'tahlil.jsonl'), '--istek', 'POST /api/tahlil'], capture_output=True, text=True)
 satir = [json.loads(x) for x in open(os.path.join(OUT, 'tahlil.jsonl'), encoding='utf-8')] if ck.returncode == 0 else []

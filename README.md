@@ -11,28 +11,29 @@ Tampermonkey için kişisel userscript koleksiyonu. Her betik tek dosyadır, bu 
 | Makro Menü | 8.2 | Yüzen menü. "Kaynakları listele" sayfadaki video, ses ve resimleri tek panelde toplar (izle, indir, göster, kopyala); "Dışa aktar" sayfayı Markdown / metin / HTML olarak kopyalar veya indirir. Dişli düğme sürüklenir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/makro-menu.user.js) |
 | Döviz TL | 3.4 | Sayfadaki Euro ve dolar (USD, CAD, AUD, HKD, NZD) fiyatlarının arkasına güncel kurla TL karşılığını ekler | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/doviz-tl.user.js) |
 | Medya İndir | 1.8 | Sayfadaki resim ve videoların köşesine indirme simgesi koyar; resmi en yüksek çözünürlükte, videoyu doğrudan dosya adresinden indirir. Akış videoları (YouTube vb.) ve Instagram kapsam dışıdır; tembel yüklenen videoda önce oynatma gerekir | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/medya-indir.user.js) |
-| Web Ajanı | 0.2.0 | Siteyi gördüğün gibi kaydeder: sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri, işaretlenen öğenin seçicisi ve stili, sayfa tasarımı, hatalar; otomatik keşif, toplayıcı, sayfa fotokopisi. Kayıt cihazda kalır, dosya olarak indirilir. Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/web-ajani.user.js) |
+| Web Ajanı | 0.3.0 | Makro kaydı gibi: **Kaydı başlat**, sitede istediğin her yere tıkla, **Durdur ve indir**. Sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri ve hatalar tek dosyaya iner; sayaç neyin kaydedildiğini gösterir. Diğer araçlar: otomatik gez, öğe işaretle, tasarımı oku, fotokopi, toplayıcı. Ayrıntı aşağıda | [kur](https://raw.githubusercontent.com/mtnseven/browser-tampermonkey/main/web-ajani.user.js) |
 | Claude Tema (eski) | 0.5.3 | Site Tema'nın önceki hâli. Yeni kurulumda kullanılmaz; kurulu olan, Site Tema kurulup ayarları taşındıktan sonra Tampermonkey'den silinir | — |
 
 ## Web Ajanı
 
-Tarayıcıda açık sitenin yapısını kaydeden modüllü araç. Kayıt sitenin kendi tarayıcı deposunda (IndexedDB) durur; dışarı hiçbir şey göndermez. Panelden **İndir** ile JSON dosyası olur; `web-ajani-kaynak/ozetle.py` bu dosyadan değer göstermeyen kısa bir yapı özeti çıkarır, `web-ajani-kaynak/cikar.py` toplanan yanıtları ham hâliyle JSON Lines dosyasına çıkarır.
+Tarayıcıda açık sitenin yapısını makro kaydı gibi kaydeden araç. Kayıt sitenin kendi tarayıcı deposunda (IndexedDB) durur; dışarı hiçbir şey göndermez. **Durdur ve indir** JSON dosyası indirir; `web-ajani-kaynak/ozetle.py` bu dosyadan değer göstermeyen kısa bir yapı özeti çıkarır, `web-ajani-kaynak/cikar.py` toplanan yanıtları ham hâliyle JSON Lines dosyasına çıkarır.
 
 | Ne | Nasıl |
 |---|---|
 | Hangi sitede çalışır | Varsayılan: enabiz.gov.tr, claude.ai, chatgpt.com. Başka sitede **Alt+Shift+W** o siteyi açar veya kapatır (sayfa yenilenir). Kapalı sitede yalnız bu tuş dinlenir |
-| Panel | Sol alttaki **WA** düğmesi. **Modüller** başlığı altında her modül tek tek açılır ve kapanır |
+| Kayıt | Sol altta tek çubuk. **● Kaydı başlat** → sitede istediğin her yere tıkla, sayfadan sayfaya geç → **■ Durdur ve indir**. Kayıt sürerken çubuk kırmızıdır ve canlı sayaç gösterir (süre, tık, sayfa, istek); üstündeki satır son kaydedileni yazar. Sayfa değişse, yenilense de kayıt sürer. Kayıt kapalıyken hiçbir şey kaydedilmez. Yeni kayıt öncekini siler (Durdur onu zaten indirdi) |
+| Diğer araçlar | Çubuktaki **≡**. Araçlar kayıt kapalıysa kaydı kendisi başlatır |
 | Harita | Düğme, bağlantı, sekme, açılır liste ve bütün seçenekleri, arama kutusu, sayfalama, tablo sütunları, tekrarlanan kart kalıbı |
 | Durum kaydı | Her tıklamadan sonra 1,5 sn ne değiştiğine bakar: açılan pencere ve içeriği, adres değişikliği, yeni pencere |
-| Ağ kaydı | fetch ve XHR istekleri yanıtlarıyla, tetikleyen tıklamaya bağlı. Yalnız site profilinde açık (enabiz.gov.tr) |
+| Ağ kaydı | fetch ve XHR istekleri yanıtlarıyla, tetikleyen tıklamaya bağlı |
 | Hata günlüğü | Sayfa hataları, konsol hataları, başarısız istekler |
 | Öğe işaretçi | **İşaretle**, sonra öğeye tıkla: sağlam seçici, çevresi, hesaplanmış stili, görünen zemini, kullandığı CSS değişkenleri. Esc vazgeçer |
 | Tasarım okuyucu | **Tasarımı oku**: CSS değişkenleri, en çok kullanılan yazı ve zemin renkleri, yazı tipleri, boyutlar |
-| Otomatik keşif | **Keşfet**: açık penceredeki ve sayfadaki sekmeler, açılır listelerin her seçeneği (sonra ilk değere döner), kapalı bölümler, ikinci sayfa, her kart kalıbının ilk kartı (pencere açılırsa sekmeleri, sonra kapatır). Frenli düğmeye, başka sayfaya ya da yeni sekmeye giden bağlantıya, form gönderen düğmeye basmaz; keşif sürerken sayfanın sorduğu onay "hayır" alır, yeni pencere açılmaz. En çok 80 adım; **Durdur** keser |
-| Toplayıcı | Sayfada gezip kaydedilen bir veri adresini seç, değişkenleri yaz (`yil=2015-2026; sayfa=1-45` ya da `yil=2024,2025`), **Başlat**. İstek kaydedildiği gibi yeniden kurulur; gizlenen jeton sayfadaki gizli alandan alınır. Oturum düşerse (401/403, giriş sayfası, JSON yerine HTML) durur; giriş yapıp **Sürdür** kaldığı yerden devam eder. Yalnız site profilinde açık (enabiz.gov.tr) |
+| Otomatik gez | **≡ → Otomatik gez**: açık penceredeki ve sayfadaki sekmeler, açılır listelerin her seçeneği (sonra ilk değere döner), kapalı bölümler, ikinci sayfa, her kart kalıbının ilk kartı (pencere açılırsa sekmeleri, sonra kapatır), en son aynı sitedeki başka sayfalara giden bağlantılar: o sayfaya gider, kaydeder, başlangıç sayfasına döner ve kalan yerlerden sürer; aynı öğeye iki kez basmaz. Frenli düğmeye, çıkış ve dosya bağlantısına, yeni sekmeye giden bağlantıya, form gönderen düğmeye basmaz; gez sürerken sayfanın sorduğu onay "hayır" alır, yeni pencere açılmaz. En çok 150 adım ve 40 sayfa; çubuktaki **■ Gezmeyi durdur** anında keser |
+| Toplayıcı | Sayfada gezip kaydedilen bir veri adresini seç, değişkenleri yaz (`yil=2015-2026; sayfa=1-45` ya da `yil=2024,2025`), **Başlat**. İstek kaydedildiği gibi yeniden kurulur; gizlenen jeton sayfadaki gizli alandan alınır. Oturum düşerse (401/403, giriş sayfası, JSON yerine HTML) durur; giriş yapıp **Sürdür** kaldığı yerden devam eder. Yalnız site profilinde görünür (enabiz.gov.tr) |
 | Sayfa fotokopisi | **Fotokopi**: sayfanın (açık pencere varsa onun) başlık, liste, tablo ve bağlantılarıyla sade metni; kayda yazılır ve panoya kopyalanır |
-| Güvenlik | Araç, keşif dışında hiçbir düğmeye kendiliğinden basmaz; sil, gönder, paylaş, kaydet gibi düğmeler haritada FRENLİ diye işaretlenir. Parola ve gizli alanların değeri kaydedilmez, istek gövdesinde de gizlenir |
-| Hafiflik | Kapalı modül kurulmaz. Sınamada kurulum 1-5 ms, tık başına ek gecikme 1 ms altı |
+| Güvenlik | Araç, gez dışında hiçbir düğmeye kendiliğinden basmaz; sil, gönder, paylaş, kaydet gibi düğmeler haritada FRENLİ diye işaretlenir. Parola ve gizli alanların değeri kaydedilmez, istek gövdesinde de gizlenir |
+| Hafiflik | Kayıt kapalıyken kanca isteğe dokunmadan geçer. Sınamada kurulum 1-5 ms, tık başına ek gecikme 1 ms altı |
 
 Sınama: `web-ajani-kaynak/test/dene.py web-ajani.user.js CIKTI` (sahte e-Nabız sayfası, ağsız).
 

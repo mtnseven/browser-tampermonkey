@@ -248,8 +248,12 @@ if kes:
     for o in kes:
         if o.get('basladi'):
             yaz('- Başladı: %s · %s' % (o.get('sayfa'), o.get('zaman', '')[:19]))
+        elif o.get('devam'):
+            yaz('- Başlangıç sayfasına dönüldü, devam: %s. adımdan' % o.get('adim'))
+        elif o.get('ziyaret'):
+            yaz('- Gezilen sayfa: %s "%s"' % (o['ziyaret'], o.get('baslik', '')))
         elif o.get('bitti'):
-            yaz('- Bitti: %s · %s adım · %s frenli/güvensiz atlandı' % (o.get('neden'), o.get('adim'), o.get('atlanan')))
+            yaz('- Bitti: %s · %s adım · %s sayfa · %s frenli/güvensiz atlandı' % (o.get('neden'), o.get('adim'), o.get('gezilenSayfa', 0), o.get('atlanan')))
         elif o.get('uyari'):
             yaz('- Uyarı: %s · %s' % (o['uyari'], o.get('mesaj', '')))
 
