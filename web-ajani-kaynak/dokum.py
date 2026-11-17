@@ -84,6 +84,7 @@ def tablolar(kok):
     return sonuc
 
 
+DURUM = {'Normal': 'Normal', 'Refdisi': 'Referans dışı'}
 AYLAR = {a: i + 1 for i, a in enumerate(['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'])}
 
 
@@ -128,7 +129,7 @@ def tahliller(html):
                         deger[ad] = etiketsiz(c, etk)
                     durum = [x[5:] for x in c.sinif if x.startswith('durum') and len(x) > 5]
                     if durum:
-                        deger['Durum'] = durum[0]
+                        deger['Durum'] = DURUM.get(durum[0], durum[0])
                 if deger:
                     sonuclar.append(deger)
             gun['gruplar'].append({'ad': grup_ad, 'sonuclar': sonuclar})
@@ -244,7 +245,15 @@ def main():
             sayim.append((ad, '%d satır' % sum(len(x['satirlar']) for x in t)))
             for x in t:
                 md += md_tablo(*bos_sutun_at(x)) + ['']
+    # Sunucunun boş döndürdüğü ayrıntılar (durum 200, 0 bayt) ayrıca sayılır
+    bos = {}
+    for o in veri.get('olaylar', []):
+        if o['tur'] == 'dokum' and o.get('ad') and not o.get('yanit') and not o.get('hata') and o.get('durum') == 200:
+            bos[o['ad']] = bos.get(o['ad'], 0) + 1
     md += ['## Ayrıntılar', '']
+    if bos:
+        md += ['Sunucu boş döndürdü: ' + ', '.join('%s %d' % kv for kv in bos.items()), '']
+        sayim.append(('Boş ayrıntı', ', '.join('%s %d' % kv for kv in bos.items())))
     for yol, ad in AYRINTILAR:
         l = y.get(yol) or []
         if not l:
