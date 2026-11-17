@@ -14,6 +14,41 @@ PAROLA = 'Parola-Gizli-987'
 sonuc = {}
 TAHLIL = []
 OTURUM = {'dustu': False}
+DOKUM = []
+ILAC = 'ILAC-GIZLI-456'
+
+
+# Sağlık dökümü için sahte e-Nabız yanıtları (yapı 17.11.2026 gerçek kaydından; değerler uydurma)
+def dokum_yaniti(yol, u, govde, b):
+    from urllib.parse import parse_qs, urlsplit
+    g = parse_qs(govde or '')
+    DOKUM.append((yol, g, b.get('xsrf-token'), b.get('requestverificationtoken')))
+    if b.get('xsrf-token') != 'TOKEN-ABC' or b.get('x-requested-with') != 'XMLHttpRequest':
+        return 400, 'jeton yok'
+    if yol == 'Rapor/Index' and g.get('startYear') == ['2010']:
+        return 400, 'aralık geçersiz'
+    if yol == 'RadyolojikGoruntu' and b.get('requestverificationtoken') != 'TOKEN-ABC':
+        return 400, 'jeton yok'
+    if yol == 'Tahlil/Index':
+        gun = ('<div class="accordion-item"><div class="tahlilContent"><span class="tAcordionDate"><span class="zCardDateGun">%d</span><span class="zCardDateAy">Ağustos</span><span class="zCardDateYil">2024</span></span>'
+               '<div class="hastaneAdi">Sahte Hastanesi</div></div><div class="accordion-body"><div class="tahlilList"><div class="tahlilHeader"><div class="degerDurumBox tahlilGroup">Hemogram<div class="columnContainer"><a class="islemBtn">Bu İşlem Bana Ait Değil</a></div></div></div>'
+               '<div class="tahlilBody"><div class="rowContainer"><div class="columnContainer islemAdiContainer"><span>İşlem Adı :</span>Glukoz</div><div class="columnContainer"><span>Sonuç :</span>' + GIZLI_DEGER + '</div>'
+               '<div class="columnContainer"><span>Sonuç Birimi :</span>mg/dL</div><div class="columnContainer"><span>Referans Değeri :</span>70-100</div><div class="columnContainer durumYuksek"></div></div></div></div></div></div>')
+        dolgu = '<div class="dolgu">' + 'x' * 400000 + '</div>'
+        return 200, '<div>' + ''.join(gun % (i + 1) for i in range(3)) + dolgu + '</div>'
+    if yol == 'Recete/Index':
+        sat = ''.join('<tr><td>0%d.08.2024</td><td>R%d</td><td>Normal</td><td>Dr X</td><td><a onclick="ReceteDetayGoster(\'S%d\', \'R%d\', \'a\', \'b\')">Detay</a></td></tr>' % (i, i, i, i) for i in (1, 2, 2))
+        return 200, '<table><tr><th>Tarih</th><th>Reçete No</th><th>Reçete Türü</th><th>Hekim</th><th></th></tr>' + sat + '</table>'
+    if yol == 'Recete/GetReceteDetay':
+        return 200, '<table><tr><th>Barkod</th><th>İlaç Adı</th></tr><tr><td>869</td><td>' + ILAC + '</td></tr></table>'
+    if yol == 'Ziyaret/Index':
+        kart = ('<div class="card ziyaretCardList"><span class="zCardDate"><span class="zCardDateGun">%d</span><span class="zCardDateAy">Ekim</span><span class="zCardDateYil">2025</span></span>'
+                '<p class="card-text">Sahte Hastanesi</p><p class="drBrans">Dahiliye</p><p class="drAdi">Dr Y</p>'
+                '<a class="card-red-link" onclick="openModal({ url: \'/Ziyaret/GetZiyaretDetay?data=Z%d&amp;hastane=Sahte&amp;brans=Dahiliye&amp;hastaneKod=1&amp;hekim=Y\', modalId: \'m\' })">Detay Görüntüle</a></div>')
+        return 200, ''.join(kart % (i, i) for i in (1, 2))
+    if yol == 'Ziyaret/GetZiyaretDetay':
+        return 200, '<table><tr><th>Tarih</th><th>Tanı</th></tr><tr><td>01.10.2025</td><td>' + GIZLI_DEGER + '</td></tr></table>'
+    return 200, '<table><tr><th>Tarih</th><th>Referans No</th></tr><tr><td>01.01.2025</td><td>%s</td></tr></table>' % yol.replace('/', '-')
 
 
 def kontrol(ad, kosul, ek=''):
@@ -43,6 +78,10 @@ def yonlendir(route):
             route.fulfill(status=401, content_type='text/plain', body='oturum yok')
         else:
             route.fulfill(status=200, content_type='application/json', body=json.dumps({'yil': yil, 'tahliller': [{'ad': 'Glukoz', 'deger': GIZLI_DEGER}]}))
+    elif yol.split('?')[0] in ('Tahlil/Index', 'Recete/Index', 'Recete/GetOptikReceteler', 'Recete/GetTibbiCihazReceteler', 'Hastalik/Index', 'Ziyaret/Index', 'Rapor/Index',
+                               'RadyolojikGoruntu', 'Patoloji/Index', 'Epikriz/Index', 'Recete/GetReceteDetay', 'Ziyaret/GetZiyaretDetay'):
+        d, govde = dokum_yaniti(yol.split('?')[0], u, route.request.post_data, route.request.headers)
+        route.fulfill(status=d, content_type='text/html; charset=utf-8', body=govde)
     elif yol.startswith('api/bozuk'):
         route.fulfill(status=500, content_type='text/plain', body='sunucu hatası')
     elif yol.startswith('api/giris'):
@@ -330,6 +369,32 @@ with sync_playwright() as p:
     tik_sure = s.evaluate("""(async () => { const b = document.querySelectorAll('button')[700]; const t = performance.now(); b.click(); return performance.now() - t; })()""")
     kontrol('tık başına ek gecikme 5 ms altında', tik_sure < 5, '%.2f ms' % tik_sure)
     s.screenshot(path=os.path.join(OUT, 'buyuk.png'))
+
+    # 11b · sağlık dökümü: listeler, yedek aralık, ayrıntı zinciri, 4 MB sınırı, bitince dosya iner
+    s.goto('http://enabiz.gov.tr/Home/Ziyaretler'); s.wait_for_function("window.__webAjani"); s.wait_for_timeout(800)
+    panel(s, ".querySelector('[data-e=araclar]').click()"); s.wait_for_timeout(200)
+    kontrol('Sağlık dökümü düğmesi profilde', panel(s, ".querySelector('[data-e=dokum]') !== null"))
+    panel(s, ".querySelector('[data-e=araclar]').click()")
+    DOKUM.clear()
+    t1 = time.time()
+    with s.expect_download(timeout=90000) as ind2:
+        s.evaluate("window.__webAjani.saglikDokumu(300)")
+    dsure = time.time() - t1
+    ddosya = os.path.join(OUT, 'dokum-' + ind2.value.suggested_filename)
+    ind2.value.save_as(ddosya)
+    yollar = [d[0] for d in DOKUM]
+    kontrol('döküm listeleri çağırdı', all(x in yollar for x in ('Tahlil/Index', 'Recete/Index', 'Hastalik/Index', 'Ziyaret/Index', 'RadyolojikGoruntu', 'Epikriz/Index')), yollar)
+    kontrol('döküm yıl aralığı geniş', any(d[0] == 'Tahlil/Index' and d[1].get('baslangicTarihi') == ['2010'] and d[1].get('bitisTarihi') == [str(time.localtime().tm_year)] for d in DOKUM))
+    kontrol('döküm reddedilen aralıkta sayfanın aralığıyla yeniden dener', [d[1].get('startYear') for d in DOKUM if d[0] == 'Rapor/Index'] == [['2010'], ['2017']])
+    kontrol('döküm jeton başlıkları sayfadan', all(d[2] == 'TOKEN-ABC' for d in DOKUM) and any(d[0] == 'RadyolojikGoruntu' and d[3] == 'TOKEN-ABC' for d in DOKUM))
+    kontrol('döküm reçete ayrıntısı tekrarsız', yollar.count('Recete/GetReceteDetay') == 2, yollar.count('Recete/GetReceteDetay'))
+    kontrol('döküm ziyaret ayrıntısı listeden', yollar.count('Ziyaret/GetZiyaretDetay') == 2)
+    s.wait_for_timeout(300)
+    kontrol('döküm bitince kayıt kapandı, dosya indi', not s.evaluate("window.__webAjani.kayittaMi()") and 'Sağlık dökümü bitti' in panel(s, ".querySelector('.son').textContent"), panel(s, ".querySelector('.son').textContent"))
+    dveri = json.load(open(ddosya, encoding='utf-8'))
+    tah = [o for o in dveri['olaylar'] if o['tur'] == 'dokum' and o.get('adres') == '/Tahlil/Index']
+    kontrol('döküm 400 KB yanıtı kesmez', tah and len(tah[0]['yanit']) > 400000 and not tah[0].get('kesildi'), tah and len(tah[0]['yanit']))
+    print('  döküm süresi %.1f sn, %d istek' % (dsure, len(DOKUM)))
     tarayici.close()
 
 # 12 · sunucu özeti: yapı var, sağlık değeri ve parola yok
@@ -347,6 +412,12 @@ kontrol('özet toplanan değeri göstermez', GIZLI_DEGER not in oz.stdout)
 ck = subprocess.run([sys.executable, os.path.join(KLASOR, '..', 'cikar.py'), dosya, os.path.join(OUT, 'tahlil.jsonl'), '--istek', 'POST /api/tahlil'], capture_output=True, text=True)
 satir = [json.loads(x) for x in open(os.path.join(OUT, 'tahlil.jsonl'), encoding='utf-8')] if ck.returncode == 0 else []
 kontrol('cikar.py ham yanıtları çıkarır', [x['degerler']['yil'] for x in satir] == ['2018', '2019', '2020', '2021'] and satir[0]['json']['tahliller'][0]['deger'] == GIZLI_DEGER, ck.stdout.strip() + ck.stderr[-200:])
+oz2 = subprocess.run([sys.executable, os.path.join(KLASOR, '..', 'ozetle.py'), ddosya], capture_output=True, text=True)
+kontrol('özette döküm bölümü, değer yok', '## Sağlık dökümü' in oz2.stdout and 'Bitti: bitti' in oz2.stdout and GIZLI_DEGER not in oz2.stdout and ILAC not in oz2.stdout, oz2.stderr[-300:])
+dk = subprocess.run([sys.executable, os.path.join(KLASOR, '..', 'dokum.py'), ddosya, os.path.join(OUT, 'dokum')], capture_output=True, text=True)
+dmd = open(os.path.join(OUT, 'dokum', 'saglik_dokumu.md'), encoding='utf-8').read() if dk.returncode == 0 else ''
+kontrol('dokum.py tahlil, reçete ve ziyaret', 'Tahliller: 3 gün, 3 sonuç' in dk.stdout and 'Reçete ayrıntısı: 2 kayıt' in dk.stdout and 'Ziyaretler: 2 ziyaret' in dk.stdout and 'Eksik: yok' in dk.stdout, dk.stdout + dk.stderr[-300:])
+kontrol('dokum.py değerleri dosyaya yazar, ekrana yazmaz', GIZLI_DEGER in dmd and ILAC in dmd and '| Glukoz | ' + GIZLI_DEGER + ' | mg/dL | 70-100 | Yuksek |' in dmd and GIZLI_DEGER not in dk.stdout)
 print('Özet: %d satır, %d bayt; kayıt dosyası %d bayt' % (oz.stdout.count('\n'), len(oz.stdout.encode()), os.path.getsize(dosya)))
 gecen = sum(sonuc.values())
 print('SONUC: %d / %d' % (gecen, len(sonuc)))

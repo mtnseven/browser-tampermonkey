@@ -284,6 +284,27 @@ if top:
             if o.get('hata'):
                 yaz('  - hata %s: %s' % (json.dumps(o['degerler'], ensure_ascii=False), o['hata']))
 
+# ------------------------------------------------ sağlık dökümü (değer yok; dönüştürme dokum.py ile)
+dok = [o for o in olaylar if o['tur'] == 'dokum']
+if dok:
+    yaz('')
+    yaz('## Sağlık dökümü')
+    for o in dok:
+        if o.get('basladi'):
+            yaz('- Başladı: %d liste' % len(o.get('listeler') or []))
+        elif o.get('ayrinti'):
+            yaz('- %s: %s istek' % (o['ayrinti'], o.get('sayi')))
+        elif o.get('bitti'):
+            yaz('- Bitti: %s · %s istek, %s hata' % (o.get('neden'), o.get('istek'), o.get('hata')))
+    gruplar = OrderedDict()
+    for o in dok:
+        if o.get('ad'):
+            gruplar.setdefault(o['ad'], []).append(o)
+    for ad, l in gruplar.items():
+        yaz('  - %s: %d yanıt · durum %s · %d KB%s%s' % (ad, len(l), dict(Counter(str(o.get('durum')) for o in l)), sum(o.get('boyut', 0) for o in l) // 1024,
+            ' · kesildi %d' % sum(1 for o in l if o.get('kesildi')) if any(o.get('kesildi') for o in l) else '',
+            ' · hata: ' + '; '.join(sorted(set(o['hata'] for o in l if o.get('hata'))))[:200] if any(o.get('hata') for o in l) else ''))
+
 # ------------------------------------------------ kapsama
 yaz('')
 yaz('## Kapsama')

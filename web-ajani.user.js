@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Web Ajanı
 // @namespace    mtnseven/browser-tampermonkey
-// @version      0.3.0
-// @description  Makro kaydı gibi: Kaydı başlat, sitede istediğin her yere tıkla, Durdur ve indir. Sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri ve hatalar tek dosyaya iner; sayaç neyin kaydedildiğini gösterir. Diğer araçlar: otomatik gez, öğe işaretle, tasarımı oku, fotokopi, toplayıcı. Yalnız izin verilen sitede çalışır (Alt+Shift+W).
+// @version      0.4.0
+// @description  Makro kaydı gibi: Kaydı başlat, sitede istediğin her yere tıkla, Durdur ve indir. Sayfa haritası, tıklamadan sonra ne değiştiği, ağ istekleri ve hatalar tek dosyaya iner; sayaç neyin kaydedildiğini gösterir. Diğer araçlar: otomatik gez, öğe işaretle, tasarımı oku, fotokopi, toplayıcı, e-Nabız sağlık dökümü. Yalnız izin verilen sitede çalışır (Alt+Shift+W).
 // @author       mtnseven
 // @match        *://*/*
 // @run-at       document-start
@@ -13,7 +13,7 @@
 
 (function () {
   'use strict';
-  const SURUM = '0.3.0';
+  const SURUM = '0.4.0';
   const T0 = performance.now();
   const CERCEVE = window.top !== window;
   // Sayfa yüklemesi kimliği: tık numarası her yüklemede 1'den başlar; özet ikisini birlikte kullanır
@@ -44,8 +44,31 @@
   let kayit = kayitOku(), fark = {};
   // Panel durumu (olay() sayacı günceller; panel kodu dosyanın sonunda)
   let kok = null, el$ = {}, araclar = null, sonIs = '', cizBekliyor = false, zamanlayici = null, toplaAdresler = [];
-  // Site profili: toplayıcı yalnız profildeki sitede görünür.
-  const PROFILLER = { 'enabiz.gov.tr': { toplayici: true } };
+  // e-Nabız sağlık dökümü tarifi (Metin'in 17.11.2026 kaydından): liste adresleri yıl aralığıyla tek istekte,
+  // ayrıntılar liste yanıtındaki düğmelerden. Sunucu geniş aralığı reddederse sayfanın kendi aralığıyla bir kez daha denenir.
+  const ENABIZ_DOKUM = {
+    baslangic: 2010, yedek: 2017,
+    listeler: [
+      { ad: 'Tahliller', adres: '/Tahlil/Index', govde: 'baslangicTarihi={bas}&bitisTarihi={son}&activeTab=0', yedek: 2014 },
+      { ad: 'Reçeteler', adres: '/Recete/Index', govde: 'baslangicYil={bas}&bitisYil={son}' },
+      { ad: 'Optik reçeteler', adres: '/Recete/GetOptikReceteler', govde: 'baslangicYil={bas}&bitisYil={son}' },
+      { ad: 'Tıbbi cihaz reçeteleri', adres: '/Recete/GetTibbiCihazReceteler', govde: 'baslangicYil={bas}&bitisYil={son}' },
+      { ad: 'Hastalıklar', adres: '/Hastalik/Index', govde: 'baslangicYili={bas}&bitisYili={son}' },
+      { ad: 'Ziyaretler', adres: '/Ziyaret/Index', govde: 'baslangicYil={bas}&bitisYil={son}' },
+      { ad: 'Raporlar', adres: '/Rapor/Index', govde: 'startYear={bas}&endYear={son}' },
+      { ad: 'Radyoloji', adres: '/RadyolojikGoruntu', govde: 'startYear={bas}&endYear={son}', jetonBaslik: 'requestverificationtoken' },
+      { ad: 'Patoloji', adres: '/Patoloji/Index', govde: 'baslangicYili={bas}&bitisYili={son}' },
+      { ad: 'Epikrizler', adres: '/Epikriz/Index', govde: 'baslangicYil={bas}&bitisYil={son}' }
+    ],
+    ayrintilar: [
+      { ad: 'Reçete ayrıntısı', liste: '/Recete/Index', desen: /ReceteDetayGoster\(\s*'([^']*)'\s*,\s*'([^']*)'/g,
+        istek: m => ({ yontem: 'POST', adres: '/Recete/GetReceteDetay?data={"SYSTakipNo": "' + m[1] + '","ReceteNo":"' + m[2] + '"}' }) },
+      { ad: 'Ziyaret ayrıntısı', liste: '/Ziyaret/Index', desen: /url:\s*'(\/Ziyaret\/GetZiyaretDetay\?[^']*)'/g,
+        istek: m => ({ yontem: 'GET', adres: htmlCoz(m[1]) }) }
+    ]
+  };
+  // Site profili: toplayıcı ve sağlık dökümü yalnız profildeki sitede görünür.
+  const PROFILLER = { 'enabiz.gov.tr': { toplayici: true, dokum: ENABIZ_DOKUM } };
   const profil = Object.entries(PROFILLER).find(([s]) => host === s || host.endsWith('.' + s));
 
   // ------------------------------------------------ kayıt deposu: IndexedDB, toplu yazım
@@ -63,7 +86,7 @@
   }
   const kuyruk = [];
   let yazZamani = null;
-  const SAYAC_TUR = { tik: 'tik', degisim: 'tik', acilis: 'sayfa', adres: 'sayfa', istek: 'istek', hata: 'hata' };
+  const SAYAC_TUR = { tik: 'tik', degisim: 'tik', acilis: 'sayfa', adres: 'sayfa', istek: 'istek', dokum: 'istek', hata: 'hata' };
   function olay(tur, veri) {
     if (!kayit) return null;
     const o = Object.assign({}, veri, { tur, zaman: new Date().toISOString(), sayfa: location.pathname + location.search, yk: YUKLEME });
@@ -122,6 +145,7 @@
   // ------------------------------------------------ yardımcılar
   const KOK_ID = 'web-ajani-kok';
   const bizim = el => !!(el && el.closest && el.closest('#' + KOK_ID));
+  const htmlCoz = t => { const x = document.createElement('textarea'); x.innerHTML = t; return x.value; };
   const kirp = (t, n) => { t = (t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
   function gorunur(el) {
     if (!el.getClientRects().length) return false;
@@ -351,7 +375,8 @@
   };
 
   // ------------------------------------------------ AĞ KAYDI: fetch ve XHR, değerleriyle
-  const YANIT_SINIRI = 256 * 1024;
+  // e-Nabız liste yanıtları 600 KB - 1,4 MB (17.11.2026 kaydı); 256 KB sınırı onları kesiyordu
+  const YANIT_SINIRI = 4 * 1024 * 1024;
   const IKILI = /image|video|audio|font|octet-stream|zip|pdf/i;
   function govdeTemizle(g) {
     if (g == null) return null;
@@ -905,6 +930,79 @@
       toplamaBildir('Toplama ' + neden + ' · ' + d.sira + ' / ' + liste.length);
     }
   }
+  // ------------------------------------------------ SAĞLIK DÖKÜMÜ (profil tarifi; ilk site e-Nabız)
+  // Listeleri bütün yıllar için çeker, liste yanıtındaki ayrıntı düğmelerini sırayla çağırır, bitince kaydı durdurup indirir.
+  // İstek sayfanın kendi başlıklarıyla gider: jQuery ayarındaki başlıklar, yoksa sayfadaki doğrulama jetonu.
+  let dokumde = false;
+  function dokumBasliklari(l) {
+    const b = { accept: '*/*', 'x-requested-with': 'XMLHttpRequest' };
+    try { const j = window.jQuery && window.jQuery.ajaxSettings && window.jQuery.ajaxSettings.headers; if (j) for (const [k, v] of Object.entries(j)) b[k.toLowerCase()] = v; } catch (e) {}
+    if (!Object.keys(b).some(k => /xsrf|csrf/i.test(k))) { const g = gizliDoldur('xsrf-token'); if (g) b['xsrf-token'] = g; }
+    if (l && l.jetonBaslik && !b[l.jetonBaslik]) { const g = gizliDoldur(l.jetonBaslik); if (g) b[l.jetonBaslik] = g; }
+    return b;
+  }
+  async function dokumCagir(ad, yontem, adres, govde, l) {
+    const b = dokumBasliklari(l);
+    if (govde) b['content-type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    let r = null, metin = null, hata = null;
+    const t = performance.now();
+    try {
+      r = await ASIL_FETCH.call(window, adres, { method: yontem, headers: b, body: govde, credentials: 'same-origin' });
+      metin = await r.text();
+    } catch (e) { hata = String(e && e.message || e); }
+    const dusme = r ? oturumDustuMu(r, metin, { icerikTuru: 'text/html' }) : null;
+    const kotu = !!(hata || dusme || r.status >= 400);
+    olay('dokum', { ad, yontem, adres: adresTemizle(adres), istek: govde || undefined, durum: r ? r.status : 0, icerikTuru: r ? r.headers.get('content-type') || '' : '',
+      sure: Math.round(performance.now() - t), boyut: metin ? metin.length : 0, yanit: dusme ? undefined : (metin || '').slice(0, YANIT_SINIRI), kesildi: metin && metin.length > YANIT_SINIRI ? metin.length : undefined, hata: hata || dusme || (kotu ? 'durum ' + r.status : undefined) });
+    return { metin: kotu ? null : metin, dusme, kotu };
+  }
+  async function saglikDokumu(aralik) {
+    const t = profil && profil[1].dokum;
+    if (!t || dokumde || toplamada) return;
+    await kayitGerekli();
+    dokumde = true; toplamaDur = false; cizIste();
+    aralik = Math.max(300, +aralik || 700);
+    const yil = new Date().getFullYear(), n = { istek: 0, hata: 0 };
+    let neden = 'bitti';
+    const durum = m => bildir('Sağlık dökümü · ' + m + ' · ' + n.istek + ' istek' + (n.hata ? ', ' + n.hata + ' hata' : ''));
+    const cagir = async (...a) => { const s = await dokumCagir(...a); n.istek++; if (s.kotu) n.hata++; return s; };
+    olay('dokum', { basladi: true, listeler: t.listeler.map(l => l.ad) });
+    try {
+      const yanitlar = {};
+      for (const [i, l] of t.listeler.entries()) {
+        if (toplamaDur) { neden = 'durduruldu'; break; }
+        durum((i + 1) + '/' + t.listeler.length + ' ' + l.ad);
+        const govde = b => l.govde.replace('{bas}', b).replace('{son}', yil);
+        let s = await cagir(l.ad, 'POST', l.adres, govde(t.baslangic), l);
+        if (!s.dusme && s.kotu) { await bekle(aralik); s = await cagir(l.ad + ' (sayfanın aralığı)', 'POST', l.adres, govde(l.yedek || t.yedek), l); }
+        if (s.dusme) { neden = 'oturum düştü (' + s.dusme + '); giriş yap, sonra yeniden Sağlık dökümü'; break; }
+        if (s.metin) yanitlar[l.adres] = s.metin;
+        await bekle(aralik);
+      }
+      dis: for (const a of t.ayrintilar) {
+        if (neden !== 'bitti') break;
+        const y = yanitlar[a.liste];
+        if (!y) continue;
+        const istekler = [], gorulen = new Set();
+        for (const m of y.matchAll(a.desen)) { const k = a.istek(m); if (!gorulen.has(k.adres)) { gorulen.add(k.adres); istekler.push(k); } }
+        olay('dokum', { ayrinti: a.ad, sayi: istekler.length });
+        for (const [i, k] of istekler.entries()) {
+          if (toplamaDur) { neden = 'durduruldu'; break dis; }
+          durum(a.ad + ' ' + (i + 1) + '/' + istekler.length);
+          const s = await cagir(a.ad, k.yontem, k.adres, null, null);
+          if (s.dusme) { neden = 'oturum düştü (' + s.dusme + '); giriş yap, sonra yeniden Sağlık dökümü'; break dis; }
+          await bekle(aralik);
+        }
+      }
+    } finally {
+      dokumde = false;
+      olay('dokum', { bitti: true, neden, istek: n.istek, hata: n.hata });
+      await bosalt();
+      durum(neden);
+    }
+    // Bitince (ya da durdurulunca) dosya kendiliğinden iner; oturum düştüyse kayıt sürer, yeniden başlatılabilir
+    if (!/^oturum/.test(neden)) { await kayitDurdur(); bildir('Sağlık dökümü ' + neden + ' · ' + n.istek + ' istek, ' + n.hata + ' hata · dosya İndirilenler klasöründe'); }
+  }
   function adresleriListele() {
     return hepsiniOku().then(l => {
       const o = new Map();
@@ -988,7 +1086,7 @@
   function kayitDurdur() {
     if (!kayit) return Promise.resolve(null);
     if (kesifte || gezOku()) gezDurdur();
-    if (toplamada) toplamaDur = true;
+    if (toplamada || dokumde) toplamaDur = true;
     olay('kayit', { bitti: true, saniye: Math.round((Date.now() - kayit.basladi) / 1000) });
     return bosalt().then(() => {
       kayit = null; fark = {};
@@ -1030,9 +1128,9 @@
     const g = kok.attachShadow({ mode: 'open' });
     g.innerHTML = '<style>' + CSS_PANEL + '</style><div class="c"><div class="son" hidden></div><div class="bar"><span class="nok"></span><span class="say"></span>' +
       '<button data-e="baslat">● Kaydı başlat</button><button class="kir" data-e="durdur">■ Durdur ve indir</button>' +
-      '<button class="sar" data-e="gezdur">■ Gezmeyi durdur</button><button class="gri ik" data-e="araclar" title="Diğer araçlar">≡</button></div></div>';
+      '<button class="sar" data-e="gezdur">■ Gezmeyi durdur</button><button class="sar" data-e="dokumdur">■ Dökümü durdur</button><button class="gri ik" data-e="araclar" title="Diğer araçlar">≡</button></div></div>';
     el$ = { c: g.querySelector('.c'), bar: g.querySelector('.bar'), say: g.querySelector('.say'), son: g.querySelector('.son'),
-      baslat: g.querySelector('[data-e=baslat]'), durdur: g.querySelector('[data-e=durdur]'), gezdur: g.querySelector('[data-e=gezdur]') };
+      baslat: g.querySelector('[data-e=baslat]'), durdur: g.querySelector('[data-e=durdur]'), gezdur: g.querySelector('[data-e=gezdur]'), dokumdur: g.querySelector('[data-e=dokumdur]') };
     g.addEventListener('click', eylem);
     document.body.appendChild(kok);
     zamanlayiciKur(); ciz();
@@ -1044,9 +1142,9 @@
     const gez = kesifte || !!gezOku();
     el$.bar.classList.toggle('r', !!kayit);
     el$.say.innerHTML = kayit ? '<b>KAYIT ' + sureYaz(Date.now() - kayit.basladi) + '</b> · <b>' + say('tik') + '</b> tık · <b>' + say('sayfa') + '</b> sayfa · <b>' + say('istek') + '</b> istek' : 'Web Ajanı · kayıt kapalı';
-    el$.baslat.hidden = !!kayit; el$.durdur.hidden = !kayit; el$.gezdur.hidden = !gez;
+    el$.baslat.hidden = !!kayit; el$.durdur.hidden = !kayit; el$.gezdur.hidden = !gez; el$.dokumdur.hidden = !dokumde;
     el$.son.textContent = sonIs; el$.son.hidden = !sonIs;
-    if (araclar) { const b = araclar.querySelector('[data-e=gez]'); if (b) b.disabled = gez; }
+    if (araclar) { const b = araclar.querySelector('[data-e=gez]'); if (b) b.disabled = gez; const d = araclar.querySelector('[data-e=dokum]'); if (d) d.disabled = dokumde; }
   }
   function cizIste() {
     if (cizBekliyor || !kok) return;
@@ -1064,6 +1162,7 @@
     let td = null; try { td = JSON.parse(localStorage.getItem(TOPLA)); } catch (e) {}
     araclar = document.createElement('div'); araclar.className = 'ar';
     araclar.innerHTML = '<h4>Diğer araçlar <small>' + SURUM + ' · ' + host + '</small></h4><p>Kayıt kapalıysa araç kaydı kendisi başlatır.</p>' +
+      (profil && profil[1].dokum ? '<div class="sat"><button data-e="dokum">Sağlık dökümü</button><small>Bütün yılların tahlil, reçete, hastalık, ziyaret, rapor, radyoloji, patoloji ve epikriz kayıtlarını çeker; birkaç dakika sürer, sayfadan ayrılma; bitince dosya iner</small></div>' : '') +
       '<div class="sat"><button class="mav" data-e="gez">Otomatik gez</button><small>Sekme, liste, kapalı bölüm, kart ve menü sayfalarını kendisi tıklar; silme, gönderme gibi düğmelere basmaz</small></div>' +
       '<div class="sat"><button class="mav" data-e="isaret">Öğe işaretle</button><small>Sonra tıkladığın öğenin adını ve stilini kaydeder</small></div>' +
       '<div class="sat"><button class="mav" data-e="tasarim">Tasarımı oku</button><small>Sayfanın renkleri ve yazı tipleri</small></div>' +
@@ -1091,6 +1190,8 @@
     if (a === 'baslat') kayitBaslat();
     else if (a === 'durdur') kayitDurdur();
     else if (a === 'gezdur') gezDurdur();
+    else if (a === 'dokum') { araclarAcKapa(); saglikDokumu(); }
+    else if (a === 'dokumdur') { if (dokumde) { toplamaDur = true; bildir('Sağlık dökümü duruyor: süren istek bitince durur, dosya iner'); } }
     else if (a === 'araclar') araclarAcKapa();
     else if (a === 'gez') { araclarAcKapa(); kesfet(); }
     else if (a === 'isaret') { araclarAcKapa(); kayitGerekli().then(isaretciAc); }
@@ -1128,5 +1229,5 @@
   // Sınama ve konsol için: sayfadan erişilen tek ad.
   window.__webAjani = { surum: SURUM, kurulumMs: () => kurulumMs, kayitBaslat, kayitDurdur, kayittaMi: () => !!kayit, sayac: () => ({ tik: say('tik'), sayfa: say('sayfa'), istek: say('istek'), hata: say('hata'), toplam: say('toplam') }),
     indir, isaretciAc, sayfaTasarimi, haritaKaydet, hepsiniOku, bosalt, temizle,
-    kesfet, kesifteMi: () => kesifte, gezDurdur, toplayiciBaslat, toplamadaMi: () => toplamada, adresleriListele, fotokopi, degiskenCoz, istekKur };
+    kesfet, kesifteMi: () => kesifte, gezDurdur, toplayiciBaslat, toplamadaMi: () => toplamada, saglikDokumu, dokumdeMi: () => dokumde, adresleriListele, fotokopi, degiskenCoz, istekKur };
 })();
