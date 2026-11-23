@@ -1,0 +1,41 @@
+"""Mesaj Katla sınaması: python -I dene.py <betik.user.js> <sahte.html>"""
+import sys, pathlib
+from playwright.sync_api import sync_playwright
+betik, sayfa = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), pathlib.Path(sys.argv[2]).resolve().as_uri()
+hata = []
+def bak(ad, kosul):
+    print(("TAMAM " if kosul else "HATA  ") + ad)
+    if not kosul: hata.append(ad)
+with sync_playwright() as p:
+    b = p.chromium.launch(); s = b.new_page()
+    s.on("pageerror", lambda e: hata.append("sayfa hatası: %s" % e))
+    s.goto(sayfa); s.add_script_tag(content=betik); s.wait_for_timeout(400)
+    acik = lambda: s.eval_on_selector_all(".mk-baslik", "bs => bs.map(b => b.getAttribute('aria-expanded'))")
+    gorunur = lambda: s.eval_on_selector_all(".mk-baslik", "bs => bs.map(b => b.nextElementSibling.offsetParent !== null)")
+    bak("K1 altı mesaja altı başlık (iç içe seçici tek sayılır)", s.locator(".mk-baslik").count() == 6)
+    bak("K1 başlık: sıra no, kim, ilk satır", s.locator(".mk-baslik").first.inner_text().replace("\n", " ").startswith("▸ #1 · Sen Birinci soru: sunucu yedeği"))
+    bak("K1 uzun ilk satır kısaltılır", s.locator(".mk-baslik .mk-metin").nth(4).inner_text().endswith("…"))
+    bak("K3 açılışta son 3 açık, öncekiler kapalı", gorunur() == [False, False, False, True, True, True])
+    s.locator(".mk-baslik").first.click(); s.wait_for_timeout(100)
+    bak("K1 tıklayınca açılır", gorunur()[0] is True)
+    s.evaluate("yeniMesaj('sen','Dördüncü soru')"); s.wait_for_timeout(400)
+    g = gorunur()
+    bak("K3 yeni mesajda eskiler kapanır, son 3 açık", g[1:4] == [False, False, False] and g[4:] == [True, True, True])
+    bak("K3 elle açılan mesaja dokunulmaz", g[0] is True)
+    s.click("#mk-panel [data-is=kapat]"); s.wait_for_timeout(100)
+    bak("K2 tümünü kapat", not any(gorunur()))
+    s.click("#mk-panel [data-is=ac]"); s.wait_for_timeout(100)
+    bak("K2 tümünü aç", all(gorunur()))
+    d = s.evaluate_handle("yeniMesaj('claude','Dördüncü yanıt akıyor')"); s.wait_for_timeout(400)
+    s.evaluate("d => d.querySelector('p').textContent += ' devam'", d); s.wait_for_timeout(400)
+    g = gorunur()
+    bak("K3 tümü sonrası yeni mesajda yine çalışır", g[:5] == [False]*5 and g[5:] == [True]*3)
+    bak("akış: başlık metni güncellenir", "devam" in s.locator(".mk-baslik .mk-metin").last.inner_text())
+    s.click("#mk-panel [data-is=oto]"); s.wait_for_timeout(100)
+    s.evaluate("yeniMesaj('sen','Beşinci soru')"); s.wait_for_timeout(400)
+    bak("Oto kapalıyken yeni mesaj eskileri kapatmaz", gorunur()[5:8] == [True, True, True] and s.locator(".mk-baslik").count() == 9)
+    s.reload(); s.add_script_tag(content=betik); s.wait_for_timeout(400)
+    bak("Oto kapalı ayarı yenilemede kalır (localStorage)", all(gorunur()))
+    s.evaluate("localStorage.clear()"); s.screenshot(path=sys.argv[3] if len(sys.argv) > 3 else "/tmp/mk.png", full_page=True)
+    b.close()
+print("SONUC", "HATA %d" % len(hata) if hata else "0 hata"); [print("  ", h) for h in hata]

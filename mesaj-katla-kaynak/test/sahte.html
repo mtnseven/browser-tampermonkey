@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>sahte claude.ai sohbet</title></head>
+<body><main><div id="akis">
+<div data-test-render-count="1"><div data-testid="user-message"><p>Birinci soru: sunucu yedeği</p><p>ikinci satır</p></div></div>
+<div data-test-render-count="1"><div data-is-streaming="false"><div class="font-claude-response"><p>Birinci yanıt</p></div></div></div>
+<div data-test-render-count="1"><div data-testid="user-message"><p>İkinci soru</p></div></div>
+<div data-test-render-count="1"><div data-testid="assistant-message"><div class="font-claude-response"><p>İkinci yanıt (iç içe seçici)</p></div></div></div>
+<div data-test-render-count="1"><div data-testid="user-message"><p>Üçüncü soru çok uzun satır Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore</p></div></div>
+<div data-test-render-count="1"><div data-is-streaming="false"><div class="font-claude-response"><p>Üçüncü yanıt</p></div></div></div>
+</div></main>
+<script>window.yeniMesaj=function(kim,metin){const d=document.createElement('div');d.setAttribute('data-test-render-count','1');
+d.innerHTML=kim==='sen'?'<div data-testid="user-message"><p>'+metin+'</p></div>':'<div data-is-streaming="true"><div class="font-claude-response"><p>'+metin+'</p></div></div>';
+document.getElementById('akis').appendChild(d);return d;};</script>
+</body></html>
