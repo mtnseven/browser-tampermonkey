@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GitHub Göz
 // @namespace    metin-github-goz
-// @version      0.1.0
-// @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir (Soft dark için ayarlı)
+// @version      0.2.0
+// @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir, bağlantı alt çizgisini kaldırır (Soft dark için ayarlı)
 // @match        https://github.com/*
 // @match        https://gist.github.com/*
 // @run-at       document-start
@@ -45,6 +45,12 @@
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4,
 .markdown-body h5, .markdown-body h6, h1, h2, h3, .h1, .h2, .h3, .h4 { color: ${RENK.baslik}; }
 .markdown-body a:visited { color: ${RENK.ziyaret}; }
+/* Alt çizgi yok (Metin 24.11.2026: "tüm altı çizgili yazılardan kurtul"); GitHub'ın
+   erişilebilirlik ayarı "link underlines" açıkken de geçerli */
+a, a:hover, a:focus, .markdown-body a, .markdown-body a:hover, [data-a11y-link-underlines] a,
+[data-a11y-link-underlines="true"] .markdown-body a, .Link, .Link--primary, .Link--secondary {
+  text-decoration: none !important;
+}
 b, strong, th, .text-bold, .text-semibold, .f1, .f2, .f3, .f4,
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4,
 .markdown-body h5, .markdown-body h6, .markdown-body strong, .markdown-body th,
