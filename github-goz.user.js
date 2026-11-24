@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Göz
 // @namespace    metin-github-goz
-// @version      0.4.0
+// @version      0.4.1
 // @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir, bağlantı alt çizgisini kaldırır (Soft dark için ayarlı); archive-ortak Pano.md sayfasını kitap düzeninde okuyucuya çevirir
 // @match        https://github.com/*
 // @match        https://gist.github.com/*
@@ -445,8 +445,9 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
      YENİ SEKME (0.4.0) — Pano sayfasında başka sayfaya giden bağlantı
      yeni sekmede açılır; aynı sayfadaki #atlama bağlantısı yerinde kalır.
      Metin 24.11.2026: "varsayılan olarak linkler her zaman yeni sekmede açılır".
-     Pencere yakalama aşamasında çalışır; GitHub'ın Turbo'su target'lı
-     bağlantıya karışmaz.
+     Pencere yakalama aşamasında çalışır ve sekmeyi kendisi açar; GitHub'ın
+     tıklama işleyicilerine sıra gelmez (0.4.0'da yalnız target veriliyordu,
+     GitHub tıklamayı yuttu: Metin 24.11.2026 "hiç bişey olmuyor").
      ================================================================ */
   window.addEventListener('click', (e) => {
     if (!panoSayfasi()) return;
@@ -454,7 +455,9 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
     if (!a) return;
     const u = new URL(a.href, location.href);
     if (u.origin === location.origin && u.pathname === location.pathname && u.hash) return;
-    a.target = '_blank'; a.rel = 'noopener';
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return; // tarayıcının kendi yeni sekmesi
+    e.preventDefault(); e.stopImmediatePropagation();
+    window.open(u.href, '_blank', 'noopener');
   }, true);
 
   /* ================================================================
