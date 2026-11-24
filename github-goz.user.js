@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Göz
 // @namespace    metin-github-goz
-// @version      0.3.0
+// @version      0.3.1
 // @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir, bağlantı alt çizgisini kaldırır (Soft dark için ayarlı); archive-ortak Pano.md sayfasını kitap düzeninde okuyucuya çevirir
 // @match        https://github.com/*
 // @match        https://gist.github.com/*
@@ -113,7 +113,7 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
   const KITAP = {
     zemin:   '#0b0d0f', // sayfa (kitap ve Word skill'i)
     yuzey:   '#080a0d', // açık iş kutusu
-    ustune:  '#152232', // üstüne gelinen satır
+    ustune:  '#101418', // üstüne gelinen satır: zeminden çok az açık (Metin 24.11.2026: "çok minik bir arkaplan rengi değişimi olsun yeter"; önce #152232)
     cizgi:   '#28464d', // ayraç
     yazi:    '#6d8da2', // gövde
     baslik:  '#70a1c7', // BÖLÜM başlığı
