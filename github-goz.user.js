@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Göz
 // @namespace    metin-github-goz
-// @version      0.3.1
+// @version      0.4.0
 // @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir, bağlantı alt çizgisini kaldırır (Soft dark için ayarlı); archive-ortak Pano.md sayfasını kitap düzeninde okuyucuya çevirir
 // @match        https://github.com/*
 // @match        https://gist.github.com/*
@@ -273,9 +273,9 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
       i.kaynak_url ? el('a', { href: i.kaynak_url, target: '_blank', rel: 'noopener' }, i.kaynak) : i.kaynak));
     if (i.acilis) g.append(el('p', { class: 'satir' }, el('span', { class: 'lbl' }, 'Açılış: '), i.acilis));
     i.notlar.filter(n => n.islendi).forEach(n => g.append(el('p', { class: 'satir' }, `Eski not (işlendi ${n.islendi}): ${n.metin}`)));
-    const kopya = el('button', { class: 'dugme', onclick: (e) => { e.stopPropagation(); navigator.clipboard.writeText(`- ${i.kid}: `).then(() => { kopya.textContent = 'kopyalandı'; }); } }, `"- ${i.kid}: " kopyala`);
+    const kopya = el('button', { class: 'dugme', onclick: (e) => { e.stopPropagation(); navigator.clipboard.writeText(i.not_satiri || `- ${i.kid}: `).then(() => { kopya.textContent = 'kopyalandı'; }); } }, `"- ${i.kid}: " kopyala`);
     g.append(el('div', { class: 'alt-bag' }, `Kimlik ${i.kid} · `,
-      el('a', { href: OK.veri.not_duzenle, target: '_blank', rel: 'noopener' }, 'Not yaz'), ' · ', kopya));
+      el('a', { href: i.not_yaz || OK.veri.not_duzenle, target: '_blank', rel: 'noopener' }, 'Not yaz'), ' · ', kopya));
     return g;
   }
 
@@ -440,4 +440,62 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
   else okuyucuBaslat();
 
   GM_registerMenuCommand('Pano: kitap görünümü aç / kapat', () => okuyucuDegistir(!okuyucuAcik));
+
+  /* ================================================================
+     YENİ SEKME (0.4.0) — Pano sayfasında başka sayfaya giden bağlantı
+     yeni sekmede açılır; aynı sayfadaki #atlama bağlantısı yerinde kalır.
+     Metin 24.11.2026: "varsayılan olarak linkler her zaman yeni sekmede açılır".
+     Pencere yakalama aşamasında çalışır; GitHub'ın Turbo'su target'lı
+     bağlantıya karışmaz.
+     ================================================================ */
+  window.addEventListener('click', (e) => {
+    if (!panoSayfasi()) return;
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    const u = new URL(a.href, location.href);
+    if (u.origin === location.origin && u.pathname === location.pathname && u.hash) return;
+    a.target = '_blank'; a.rel = 'noopener';
+  }, true);
+
+  /* ================================================================
+     NOT SATIRI (0.4.0) — Notlar.md düzenleme sayfası ?not=KİMLİK ile
+     açılınca "## NOTLAR" başlığının altına işin bağlam satırı yazılır:
+     "- M4QP: [9.1 · WhatsApp · iş adı] ". İmleç satır sonunda kalır.
+     Satır Pano.json'daki not_satiri (Betik_pano_uret.py); bağlam köşeli
+     parantezde, betik onu not metnine katmaz.
+     Metin 24.11.2026: "hangi işten bahsettiğimi ... otomatik yaz".
+     Adres document-start anında okunur; GitHub sonra adresi değiştirebilir.
+     ================================================================ */
+  const NOT_KID = location.pathname === '/imbat12/archive-ortak/edit/main/Notlar.md'
+    ? new URLSearchParams(location.search).get('not') : null;
+
+  function notSatiriBul(veri, kid) {
+    for (const p of (veri && veri.projeler) || []) for (const i of p.isler) if (i.kid === kid) return i.not_satiri;
+    return null;
+  }
+
+  function notYaz(satir) {
+    const t0 = Date.now();
+    const dene = () => {
+      const cm = document.querySelector('.cm-content');
+      const baslik = cm && [...cm.querySelectorAll('.cm-line')].find(l => l.textContent.startsWith('## NOTLAR'));
+      if (!baslik) { if (Date.now() - t0 < 20000) setTimeout(dene, 300); return; }
+      if (cm.textContent.includes(satir.trim())) return; // ikinci kez yazılmaz
+      cm.focus();
+      const r = document.createRange();
+      r.selectNodeContents(baslik); r.collapse(false);
+      const sec = window.getSelection(); sec.removeAllRanges(); sec.addRange(r);
+      // CodeMirror seçimi bir sonraki karede okur; yazma ondan sonra
+      requestAnimationFrame(() => setTimeout(() => document.execCommand('insertText', false, '\n' + satir), 50));
+    };
+    dene();
+  }
+
+  if (NOT_KID && /^[A-Z0-9]{4,8}$/.test(NOT_KID)) {
+    const yedek = `- ${NOT_KID}: `;
+    veriAl((h, v) => {
+      if (!h) GM_setValue('pano_veri', v);
+      notYaz(notSatiriBul(h ? GM_getValue('pano_veri', null) : v, NOT_KID) || yedek);
+    });
+  }
 })();
