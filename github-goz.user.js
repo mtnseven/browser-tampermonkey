@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub Göz
 // @namespace    metin-github-goz
-// @version      0.4.1
+// @version      0.4.2
 // @description  GitHub koyu temalarında yazıyı yumuşatır, mavi bağlantıyı açar, kalın yazıyı inceltir, bağlantı alt çizgisini kaldırır (Soft dark için ayarlı); archive-ortak Pano.md sayfasını kitap düzeninde okuyucuya çevirir
 // @match        https://github.com/*
 // @match        https://gist.github.com/*
@@ -196,7 +196,7 @@ h1, h2, h3, h4, .h1, .h2, .h3, .h4 { font-weight: ${KALIN} !important; }
     v.projeler.forEach((p, pi) => p.isler.forEach(i => { if (i.kim === 'sen') sende.push({ ...i, _p: pi }); }));
     const liste = [{ id: 's', ad: 'Senden bekleyen', isler: sende, ozel: true }];
     v.projeler.forEach((p, pi) => liste.push({ id: String(pi), ad: p.ad, isler: p.isler.map(i => ({ ...i, _p: pi })), kaldigin: p.kaldigin }));
-    liste.push({ id: 'k', ad: 'Kapananlar', kapanan: v.kapanan, ozel: true });
+    if (v.kapanan && v.kapanan.length) liste.push({ id: 'k', ad: 'Kapananlar', kapanan: v.kapanan, ozel: true });
     return liste;
   }
 
